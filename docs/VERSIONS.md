@@ -62,6 +62,18 @@ Lower bounds in each service's `pyproject.toml`, exact versions and hashes in `u
 
 Measured sizes (2026-10-06): gateway image about 590 MB of content (virtualenv 402 MB, of which ONNX Runtime 68 MB, NumPy 74 MB, ingestion-only libraries such as lxml and Babel about 50 MB; embedding model 65 MB; Python base). Gateway resident memory 347 MiB after the demo. Mock LLM 44 MiB.
 
+## Phase 3: observability
+
+| Component | Version | Why | Verified how (2026-10-06/07) |
+|---|---|---|---|
+| Prometheus | `prom/prometheus:v3.15.0` | Latest stable (v3.15.0, 2026-09-25). Runs as `nobody` (65534) by default. Rules validated with the image's `promtool check rules` | GitHub releases API; Docker Hub tags; `promtool` run |
+| Grafana | `grafana/grafana:13.2.3` | Latest stable (2026-09-29). Runs as uid 472. Dashboards provisioned from files; classic dashboard JSON (`schemaVersion` 41) loads in 13.2 | GitHub releases API; Docker Hub tags; dashboard read back through `/api/dashboards/uid/...` |
+| opentelemetry-exporter-prometheus | 0.66b1 (beta, as all OTel Prometheus exporter releases are) | `PrometheusMetricReader()` + `prometheus_client.start_http_server(port, addr)`. Names: counters get `_total`, histograms with unit `s` get `_seconds`; curly-brace units like `{request}` are dropped | Signature inspected; `/metrics` output read |
+| prometheus-client | 0.26.0 | Pulled in by the exporter; serves `/metrics` on its own port | PyPI |
+| opentelemetry-exporter-otlp-proto-http | 1.45.1 | `OTLPSpanExporter(endpoint=..., headers=..., timeout=...)`; `BatchSpanProcessor(max_queue_size, max_export_batch_size <= max_queue_size, export_timeout_millis)` | Signatures inspected; DEP-03 tests against refused, 429 and hanging endpoints |
+| FastAPI built-in telemetry | 0.142.2 | **Observed, not documented by me before:** with an OTel SDK installed, FastAPI emits its own server span (`POST /v1/ask`), `fastapi.endpoint`/`fastapi.dependencies` spans and `http.server.*` metrics labelled by route template. The gateway's own span is named `fxassist.ask` to avoid a duplicate name | Spans listed from an in-memory exporter in a test run |
+| Langfuse Cloud (optional) | Hobby tier | OTLP/HTTP only (no gRPC) at `https://cloud.langfuse.com/api/public/otel/v1/traces` (EU) or `us.cloud.langfuse.com` (US); `Authorization: Basic base64(public:secret)`; header `x-langfuse-ingestion-version: 4`. Maps `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.prompt`/`gen_ai.completion`, `input.value`/`output.value`. Free tier: 50k units/month, 30 days data access, 2 users, no credit card. Not verified: what happens past 50k units on the free tier (the pricing page does not say), so tracing stays optional and failure-tolerant (DEP-03) | langfuse.com/docs/opentelemetry/get-started, langfuse.com/integrations/native/opentelemetry, langfuse.com/pricing, read 2026-10-06. **No account was created; export to Langfuse itself is untested** |
+
 ## Later phases: planned, re-check before pinning
 
 | Component | Latest seen | Phase | Notes |
@@ -69,4 +81,3 @@ Measured sizes (2026-10-06): gateway image about 590 MB of content (virtualenv 4
 | kind | v0.33.0 (2026-08-26) | 4 | Check the node image matching the release notes |
 | Helm | v4.3.0 (2026-09-09) | 4 | **Helm 4 is a major version.** Many tutorials still show Helm 3 commands and chart behaviour; read the Helm 4 docs |
 | vLLM | not checked yet | 5 | Must confirm T4 (compute capability 7.5) and float16 support for the exact version (ADR-006, GPU-01) |
-| OpenTelemetry SDK, Prometheus, Grafana, Langfuse SDK | not checked yet | 3 | |

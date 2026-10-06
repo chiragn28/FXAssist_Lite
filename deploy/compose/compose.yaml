@@ -1,4 +1,4 @@
-# Local stack: data stores, the gateway, the mock LLM and Ollama. Observability joins in Phase 3.
+# Local stack: data stores, the gateway, the mock LLM, Ollama, Prometheus and Grafana.
 #
 # Rules every service follows (checked by tests/test_compose.py):
 #   - image (or Dockerfile base image) pinned to an exact version (docs/VERSIONS.md)
@@ -11,7 +11,7 @@
 # Profiles (ENV-02): services without a profile are the "lite" set and always start.
 #   llm   Ollama, the local dev model (ADR-022). `make up` enables it and points the gateway at
 #         it; `make up-lite` does not, and the gateway uses the mock LLM instead.
-#   full  observability (Phase 3). `make up-full` enables llm and full.
+#   full  Prometheus and Grafana (Phase 3). `make up` enables llm and full.
 name: fxassist
 
 x-hardening: &hardening
@@ -113,6 +113,8 @@ services:
     image: fxassist/mock-llm:0.2.0
     environment:
       FXA_MOCK_MODELS: mock-llm
+      # Realistic-looking timing and token usage, so dashboards have something to show.
+      FXA_MOCK_CONFIG: '{"flavour": "ollama", "first_token_ms": 150, "token_ms": 15}'
     ports:
       - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_MOCK_LLM_PORT:-8081}:8080"
     user: "10001:10001"
@@ -144,6 +146,14 @@ services:
       FXA_LLM_BASE_URL: ${FXA_GATEWAY_LLM_BASE_URL:-http://mock-llm:8080/v1}
       FXA_LLM_MODEL: ${FXA_GATEWAY_LLM_MODEL:-mock-llm}
       FXA_CACHE_ENABLED: ${FXA_CACHE_ENABLED:-true}
+      # Metrics listen inside the compose network only; this port is not published (OBS-04).
+      FXA_METRICS_HOST: 0.0.0.0
+      FXA_METRICS_PORT: "9464"
+      # Optional traces to Langfuse Cloud (free tier) or any OTLP endpoint (ADR-012, DEP-03).
+      FXA_LANGFUSE_PUBLIC_KEY: ${FXA_LANGFUSE_PUBLIC_KEY:-}
+      FXA_LANGFUSE_SECRET_KEY: ${FXA_LANGFUSE_SECRET_KEY:-}
+      FXA_LANGFUSE_HOST: ${FXA_LANGFUSE_HOST:-https://cloud.langfuse.com}
+      FXA_TRACE_CONTENT: ${FXA_TRACE_CONTENT:-false}
     ports:
       - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_GATEWAY_PORT:-8000}:8000"
     user: "10001:10001"
@@ -159,7 +169,60 @@ services:
       retries: 30
       start_period: 20s
 
+  prometheus:
+    <<: *hardening
+    profiles: [full]
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_PROMETHEUS_PORT:-9090}:9090"
+    user: "65534:65534"  # nobody, the image's default
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    <<: *hardening
+    profiles: [full]
+    image: grafana/grafana:13.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${FXA_GRAFANA_ADMIN_PASSWORD:?set FXA_GRAFANA_ADMIN_PASSWORD in .env}
+      # Local convenience: dashboards are viewable without logging in (bound to localhost).
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/fxassist.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_GRAFANA_PORT:-3000}:3000"
+    user: "472:0"  # the image's grafana user
+    # Measured 217 MiB right after start with one dashboard (2026-10-07); 256m left too little room.
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   qdrant_data:
   pg_data:
   ollama_data:
+  prometheus_data:
+  grafana_data:

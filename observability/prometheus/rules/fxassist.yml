@@ -1,0 +1,85 @@
+# Alert rules. Each one names the runbook to follow. There is no Alertmanager in the local
+# stack: alerts are visible at http://localhost:9090/alerts and on the dashboard.
+groups:
+  - name: fxassist
+    rules:
+      - alert: FxaGatewayDown
+        expr: up{job="gateway"} == 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: Prometheus cannot scrape the gateway.
+          runbook: docs/runbooks/README.md
+
+      - alert: FxaHighErrorRate
+        expr: |
+          sum(rate(fxa_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(fxa_requests_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: More than 5% of requests fail with a 5xx status.
+          runbook: docs/runbooks/llm-timeout-storm.md
+
+      # Found by the hanging-model drill (2026-10-07): with the model dead, the breaker cycles
+      # open -> half-open every 30 s and turns timeouts into fast llm_circuit_open errors, and
+      # the cache keeps answering popular questions. "Circuit open for 1 m" and "timeout rate"
+      # alerts both stayed silent for 5 minutes. These alert on the model calls instead.
+      - alert: FxaLLMFailing
+        expr: |
+          sum(rate(fxa_llm_calls_total{result!="ok"}[2m]))
+            / clamp_min(sum(rate(fxa_llm_calls_total[2m])), 1e-9) > 0.5
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: More than half of model calls fail (timeouts, errors or refused by the circuit breaker).
+          runbook: docs/runbooks/llm-timeout-storm.md
+
+      - alert: FxaLLMCircuitNotClosing
+        expr: min_over_time(fxa_llm_circuit_state[2m]) >= 1
+        labels: {severity: page}
+        annotations:
+          summary: The LLM circuit breaker has not been closed for 2 minutes; its trial calls keep failing.
+          runbook: docs/runbooks/llm-timeout-storm.md
+
+      - alert: FxaLLMTimeouts
+        expr: sum(rate(fxa_errors_total{code="llm_timeout"}[5m])) > 0.05
+        for: 2m
+        labels: {severity: ticket}
+        annotations:
+          summary: The model is timing out (more than 3 timeouts a minute).
+          runbook: docs/runbooks/llm-timeout-storm.md
+
+      - alert: FxaQdrantUnavailable
+        expr: sum(rate(fxa_errors_total{code=~"store_unavailable|index_not_ready"}[5m])) > 0
+        for: 1m
+        labels: {severity: page}
+        annotations:
+          summary: Requests fail because the document index is unavailable.
+          runbook: docs/runbooks/qdrant-down.md
+
+      - alert: FxaRedisDegraded
+        expr: sum(rate(fxa_dependency_failures_total{dependency="redis"}[5m])) > 0
+        for: 2m
+        labels: {severity: ticket}
+        annotations:
+          summary: Redis is failing; cache is off and rate limits are local and stricter.
+          runbook: docs/runbooks/redis-down.md
+
+      - alert: FxaRequestLogDropping
+        expr: increase(fxa_request_log_dropped_total[10m]) > 0
+        labels: {severity: ticket}
+        annotations:
+          summary: Request log entries are being dropped (PostgreSQL down for a while).
+          runbook: docs/runbooks/README.md
+
+      - alert: FxaSlowAnswers
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(fxa_request_duration_seconds_bucket{cached="false",outcome="answered"}[10m]))
+          ) > 10
+        for: 10m
+        labels: {severity: ticket}
+        annotations:
+          summary: p95 time for a fresh answer is above 10 s.
+          runbook: docs/runbooks/llm-timeout-storm.md

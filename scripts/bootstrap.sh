@@ -66,7 +66,7 @@ check_docker_memory() { # check_docker_memory <bytes>
     elif (( mem_mib >= 6 * 1024 * 9 / 10 )); then
         warn "Docker memory $shown: enough for the full compose stack, tight for kind (8 GB)" "$fix"
     elif (( mem_mib >= 4 * 1024 * 9 / 10 )); then
-        warn "Docker memory $shown: use the lite profile (make up), not make up-full" "$fix"
+        warn "Docker memory $shown: use the lite profile (make up-lite), not make up" "$fix"
     else
         miss "Docker memory $shown is below the 4 GB minimum" "$fix"
     fi

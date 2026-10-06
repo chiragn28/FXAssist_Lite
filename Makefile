@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 MAKEFLAGS += --no-print-directory
 
 # Raise this as phases are completed; `make bootstrap` then requires those tools.
-PHASE ?= 2
+PHASE ?= 3
 
 # Use .env when present, otherwise the committed defaults (ENV-04: ports come from here).
 ENV_FILE ?= $(if $(wildcard .env),.env,.env.example)
@@ -28,9 +28,9 @@ define not_yet
 endef
 
 .PHONY: help bootstrap install lint fmt test secrets-scan check \
-        up up-lite up-full pull-model down down-volumes ps logs \
+        up up-lite up-mock pull-model down down-volumes ps logs \
         fetch ingest ask eval experiment sources-md \
-        serve mock-llm api-key drill kind-up kind-deploy demo
+        serve mock-llm api-key drill load dashboard kind-up kind-deploy demo
 
 ##@ Setup
 help: ## Show this help
@@ -70,17 +70,20 @@ check: lint test ## Everything CI runs that needs no Docker
 WITH_OLLAMA := FXA_GATEWAY_LLM_BASE_URL=http://ollama:11434/v1 FXA_GATEWAY_LLM_MODEL=$(FXA_LLM_MODEL)
 WITH_MOCK := FXA_GATEWAY_LLM_BASE_URL=http://mock-llm:8080/v1 FXA_GATEWAY_LLM_MODEL=mock-llm
 FXA_GATEWAY_PORT ?= 8000
+FXA_GRAFANA_PORT ?= 3000
+FXA_PROMETHEUS_PORT ?= 9090
 GATEWAY_URL := http://127.0.0.1:$(FXA_GATEWAY_PORT)
 
-up: ## Start data stores, gateway, mock LLM and Ollama (GPU if available)
+up: ## Start everything: data stores, gateway, mock LLM, Ollama (GPU if available), Prometheus, Grafana
 	@echo "Ollama GPU: $(if $(filter 1,$(FXA_GPU)),on,off) (set FXA_GPU=0 or 1 to override)"
-	$(WITH_OLLAMA) COMPOSE_PROFILES=llm $(COMPOSE) up -d --wait --build
+	$(WITH_OLLAMA) COMPOSE_PROFILES=llm,full $(COMPOSE) up -d --wait --build
+	@echo "Grafana: http://127.0.0.1:$(FXA_GRAFANA_PORT)  Prometheus: http://127.0.0.1:$(FXA_PROMETHEUS_PORT)"
 
-up-lite: ## Start without Ollama: the gateway answers with the mock LLM (ENV-02)
+up-lite: ## Start without Ollama or observability: the gateway answers with the mock LLM (ENV-02)
 	$(WITH_MOCK) $(COMPOSE) up -d --wait --build
 
-up-full: ## Start everything, including observability from Phase 3
-	$(WITH_OLLAMA) COMPOSE_PROFILES=llm,full $(COMPOSE) up -d --wait --build
+up-mock: ## Everything except Ollama: observability with the mock LLM (no GPU or model download)
+	$(WITH_MOCK) COMPOSE_PROFILES=full $(COMPOSE) up -d --wait --build
 
 pull-model: ## Download the local dev model into Ollama (FXA_LLM_MODEL)
 	COMPOSE_PROFILES=llm $(COMPOSE) exec ollama ollama pull $(FXA_LLM_MODEL)
@@ -132,6 +135,15 @@ api-key: ## Create an API key (printed once): make api-key NAME=alice
 drill: ## Stop Redis, PostgreSQL and Qdrant one by one and check the gateway (needs make up)
 	@key=$$(uv run fxassist-gateway create-key --name drill 2>/dev/null) && \
 	uv run python scripts/drill.py --gateway $(GATEWAY_URL) --key "$$key" --compose "$(COMPOSE)"
+
+##@ Observability (Phase 3)
+load: ## Send a small mixed load to fill the dashboard (not a benchmark): make load SECONDS=60
+	@keys=""; for i in 1 2 3; do \
+		keys="$$keys --key $$(uv run fxassist-gateway create-key --name load-$$i 2>/dev/null)"; done; \
+	uv run python scripts/load.py --gateway $(GATEWAY_URL) $$keys --seconds $(or $(SECONDS),60)
+
+dashboard: ## Regenerate the Grafana dashboard JSON from its spec
+	uv run python observability/grafana/build_dashboard.py
 
 ##@ Kubernetes (Phase 4)
 kind-up: ## Create the local kind cluster
