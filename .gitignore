@@ -49,3 +49,6 @@ notebooks/.ipynb_checkpoints/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local evaluation runs (summaries worth keeping are copied into LEARNING.md)
+eval/runs/

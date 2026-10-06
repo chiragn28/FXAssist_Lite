@@ -4,9 +4,9 @@ version = "0.0.1"
 description = "Zero-cost self-hosted LLM platform answering questions over public forex/CFD documentation."
 readme = "README.md"
 requires-python = ">=3.11"
-# Phase 0 has no runtime code. Each service gets its own dependencies when it is built
-# (Phase 1 onwards), added as uv workspace members so every image installs only what it needs.
-dependencies = []
+# Each service is a uv workspace member with its own dependencies (ADR-021), so every
+# image installs only what it needs. The root depends on them for local development.
+dependencies = ["fxassist-agent"]
 
 [dependency-groups]
 dev = [
@@ -23,6 +23,12 @@ dev = [
 package = false
 required-version = ">=0.8.4"
 
+[tool.uv.workspace]
+members = ["services/agent"]
+
+[tool.uv.sources]
+fxassist-agent = { workspace = true }
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
@@ -38,11 +44,21 @@ select = [
     "S",   # bandit: security smells
     "SIM", # simplifications
 ]
+# `ruff format` wraps code to line-length; the long lines left are prompt text and regexes,
+# where a line break would change what the model sees or hurt readability.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fxassist_agent", "conftest"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use assert and run subprocesses on purpose.
-"tests/**" = ["S101", "S603", "S607"]
+"**/tests/**" = ["S101", "S603", "S607"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "services/agent/tests"]
 addopts = "-ra --strict-markers"
+filterwarnings = [
+    # In-memory Qdrant (tests only) ignores payload indexes; the server uses them.
+    "ignore:Payload indexes have no effect:UserWarning",
+]

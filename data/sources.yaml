@@ -1,0 +1,273 @@
+# The corpus (ADR-001). One entry per document; data/SOURCES.md is generated from this file.
+#
+# Licence terms were read on 2026-10-06 from each publisher's own page (licence_url):
+#   CFTC       public domain, acknowledgement requested
+#   ESMA       reproduction authorised provided the source is acknowledged
+#   ASIC       regulatory guides, reports and newsroom items under CC BY 4.0
+#   FCA        personal use only; stored copies must not be distributed (fetch-only here)
+#   Wikipedia  CC BY-SA 4.0
+#
+# Every URL was downloaded successfully with the project's own User-Agent on 2026-10-06.
+# Sites that block non-browser clients are excluded rather than worked around.
+
+sources:
+  # --- U.S. Commodity Futures Trading Commission (public domain) ---
+  - id: cftc-eight-things-forex
+    title: "Customer Advisory: Eight Things You Should Know Before Trading Forex"
+    publisher: CFTC
+    url: https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/CustomerAdvisory_MustKnowForex.html
+    format: html
+    licence: Public domain (U.S. Government work)
+    licence_url: https://www.cftc.gov/webpolicy/index.htm
+    redistributable: true
+
+  - id: cftc-nasaa-forex-alert
+    title: "CFTC/NASAA Investor Alert: Foreign Exchange Currency Fraud"
+    publisher: CFTC
+    url: https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/cftcnasaaforexalert.html
+    format: html
+    licence: Public domain (U.S. Government work)
+    licence_url: https://www.cftc.gov/webpolicy/index.htm
+    redistributable: true
+
+  - id: cftc-forex-frauds
+    title: Forex Frauds
+    publisher: CFTC
+    url: https://www.cftc.gov/LearnAndProtect/forexfrauds
+    format: html
+    licence: Public domain (U.S. Government work)
+    licence_url: https://www.cftc.gov/webpolicy/index.htm
+    redistributable: true
+
+  - id: cftc-forex-advisory-legacy
+    title: "FOREX Advisory: Foreign Currency Trading Frauds"
+    publisher: CFTC
+    url: https://www.cftc.gov/sites/default/files/opa/enf98/opaforexa15.htm
+    format: html
+    licence: Public domain (U.S. Government work)
+    licence_url: https://www.cftc.gov/webpolicy/index.htm
+    redistributable: true
+    notes: Older advisory; kept to test how the agent handles dated guidance.
+
+  - id: cftc-otc-forex-customer-advisory
+    title: CFTC Customer Advisory Highlights What Customers Should Know Before Trading Over-the-Counter Forex
+    publisher: CFTC
+    url: https://www.cftc.gov/PressRoom/PressReleases/8566-22
+    format: html
+    licence: Public domain (U.S. Government work)
+    licence_url: https://www.cftc.gov/webpolicy/index.htm
+    redistributable: true
+
+  # --- European Securities and Markets Authority (reproduction with acknowledgement) ---
+  - id: esma-final-measures-news
+    title: ESMA adopts final product intervention measures on CFDs and binary options
+    publisher: ESMA
+    url: https://www.esma.europa.eu/press-news/esma-news/esma-adopts-final-product-intervention-measures-cfds-and-binary-options
+    format: html
+    licence: Reproduction authorised with source acknowledged
+    licence_url: https://www.esma.europa.eu/about-esma/governance-structure/legal-notice-data-protection
+    redistributable: true
+
+  - id: esma-pi-faq
+    title: "Frequently asked questions: ESMA's temporary product intervention measures (ESMA71-98-125)"
+    publisher: ESMA
+    url: https://www.esma.europa.eu/sites/default/files/library/esma71-98-125_faq_esmas_product_intervention_measures.pdf
+    format: pdf
+    licence: Reproduction authorised with source acknowledged
+    licence_url: https://www.esma.europa.eu/about-esma/governance-structure/legal-notice-data-protection
+    redistributable: true
+
+  - id: esma-pi-press-release
+    title: "Press release: ESMA agrees to prohibit binary options and restrict CFDs (ESMA71-98-128)"
+    publisher: ESMA
+    url: https://www.esma.europa.eu/sites/default/files/library/esma71-98-128_press_release_product_intervention.pdf
+    format: pdf
+    licence: Reproduction authorised with source acknowledged
+    licence_url: https://www.esma.europa.eu/about-esma/governance-structure/legal-notice-data-protection
+    redistributable: true
+
+  - id: esma-pi-additional-info
+    title: "Additional information on the agreed product intervention measures (ESMA35-43-1000)"
+    publisher: ESMA
+    url: https://www.esma.europa.eu/sites/default/files/library/esma35-43-1000_additional_information_on_the_agreed_product_intervention_measures_relating_to_contracts_for_differences_and_binary_options.pdf
+    format: pdf
+    licence: Reproduction authorised with source acknowledged
+    licence_url: https://www.esma.europa.eu/about-esma/governance-structure/legal-notice-data-protection
+    redistributable: true
+
+  # --- Australian Securities & Investments Commission (CC BY 4.0 for these classes) ---
+  - id: asic-rg227
+    title: "Regulatory Guide 227: Over-the-counter contracts for difference: Improving disclosure for retail investors"
+    publisher: ASIC
+    url: https://download.asic.gov.au/media/5kipk33q/rg227-published-12-august-2011_20230906.pdf
+    format: pdf
+    licence: CC BY 4.0 (regulatory guide)
+    licence_url: https://www.asic.gov.au/about-asic/dealing-with-asic/copyright-and-linking-to-our-websites/
+    redistributable: true
+
+  - id: asic-rep205
+    title: "Report 205: Contracts for difference and retail investors (July 2010)"
+    publisher: ASIC
+    url: https://download.asic.gov.au/media/1343450/rep205.pdf
+    format: pdf
+    licence: CC BY 4.0 (report)
+    licence_url: https://www.asic.gov.au/about-asic/dealing-with-asic/copyright-and-linking-to-our-websites/
+    redistributable: true
+
+  - id: asic-20-254mr
+    title: "20-254MR ASIC product intervention order strengthens CFD protections"
+    publisher: ASIC
+    url: https://www.asic.gov.au/about-asic/news-centre/find-a-media-release/2020-releases/20-254mr-asic-product-intervention-order-strengthens-cfd-protections
+    format: html
+    licence: CC BY 4.0 (media release)
+    licence_url: https://www.asic.gov.au/about-asic/dealing-with-asic/copyright-and-linking-to-our-websites/
+    redistributable: true
+
+  - id: asic-22-082mr
+    title: "22-082MR ASIC's CFD product intervention order extended for five years"
+    publisher: ASIC
+    url: https://www.asic.gov.au/about-asic/news-centre/find-a-media-release/2022-releases/22-082mr-asic-s-cfd-product-intervention-order-extended-for-five-years
+    format: html
+    licence: CC BY 4.0 (media release)
+    licence_url: https://www.asic.gov.au/about-asic/dealing-with-asic/copyright-and-linking-to-our-websites/
+    redistributable: true
+
+  - id: asic-read-before-cfds
+    title: Read this before trading CFDs
+    publisher: ASIC
+    url: https://www.asic.gov.au/about-asic/news-centre/news-items/read-this-before-trading-cfds
+    format: html
+    licence: CC BY 4.0 (newsroom item)
+    licence_url: https://www.asic.gov.au/about-asic/dealing-with-asic/copyright-and-linking-to-our-websites/
+    redistributable: true
+
+  # --- UK Financial Conduct Authority (personal use only: fetch-only, never redistributed) ---
+  - id: fca-ps19-18
+    title: "PS19/18: Restricting contract for difference products sold to retail clients"
+    publisher: FCA
+    url: https://www.fca.org.uk/publication/policy/ps19-18.pdf
+    format: pdf
+    licence: "© FCA, personal use only (legal terms clause 3.2)"
+    licence_url: https://www.fca.org.uk/legal
+    redistributable: false
+
+  - id: fca-cfd-permanent-restrictions
+    title: FCA confirms permanent restrictions on the sale of CFDs and CFD-like options to retail consumers
+    publisher: FCA
+    url: https://www.fca.org.uk/news/press-releases/fca-confirms-permanent-restrictions-sale-cfds-and-cfd-options-retail-consumers
+    format: html
+    licence: "© FCA, personal use only (legal terms clause 3.2)"
+    licence_url: https://www.fca.org.uk/legal
+    redistributable: false
+
+  # --- Wikipedia (CC BY-SA 4.0), fetched as plain text through the MediaWiki API ---
+  - id: wiki-foreign-exchange-market
+    title: Foreign exchange market
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Foreign_exchange_market
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Foreign_exchange_market
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-contract-for-difference
+    title: Contract for difference
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Contract_for_difference
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Contract_for_difference
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-margin-finance
+    title: Margin (finance)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Margin_(finance)
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Margin_(finance)
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-leverage-finance
+    title: Leverage (finance)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Leverage_(finance)
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Leverage_(finance)
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-percentage-in-point
+    title: Percentage in point
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Percentage_in_point
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Percentage_in_point
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-currency-pair
+    title: Currency pair
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Currency_pair
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Currency_pair
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-bid-ask-spread
+    title: Bid–ask spread
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Bid%E2%80%93ask_spread
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Bid%E2%80%93ask_spread
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-retail-forex
+    title: Retail foreign exchange trading
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Retail_foreign_exchange_trading
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Retail_foreign_exchange_trading
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-carry-investment
+    title: Carry (investment)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Carry_(investment)
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Carry_(investment)
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+  - id: wiki-foreign-exchange-spot
+    title: Foreign exchange spot
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Foreign_exchange_spot
+    fetch_url: https://en.wikipedia.org/w/api.php?action=query&prop=extracts%7Crevisions&explaintext=1&rvprop=ids&redirects=1&format=json&formatversion=2&titles=Foreign_exchange_spot
+    format: wikipedia
+    licence: CC BY-SA 4.0
+    licence_url: https://creativecommons.org/licenses/by-sa/4.0/
+    redistributable: true
+
+excluded:
+  - title: "Investor.gov: Foreign Currency Exchange (Forex) Trading For Individual Investors"
+    url: https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins/foreign
+    reason: Returns HTTP 403 to non-browser clients; not worked around.
+  - title: "SEC investor alert: forex trading (PDF)"
+    url: https://www.sec.gov/investor/alerts/forextrading.pdf
+    reason: Returns HTTP 403 without a contact e-mail in the User-Agent; not worked around.
+  - title: "Moneysmart: Forex trading, CFDs, Thinking of trading CFDs (PDF)"
+    url: https://moneysmart.gov.au/investment-warnings/forex-trading
+    reason: Not in ASIC's CC BY classes (permission needed), and the HTML pages return HTTP 403 to non-browser clients.
