@@ -14,6 +14,7 @@ repos:
         args: [--fix=lf]
       - id: check-added-large-files # DAT-08: stops raw documents and model files
         args: [--maxkb=500]
+        exclude: ^uv\.lock$ # the lockfile is meant to be committed
       - id: check-merge-conflict
       - id: detect-private-key # SAF-07
       - id: check-executables-have-shebangs

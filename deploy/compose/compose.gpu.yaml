@@ -1,0 +1,11 @@
+# GPU override for Ollama (ADR-022). The Makefile adds this file automatically when
+# `nvidia-smi` works; set FXA_GPU=0 to force CPU, FXA_GPU=1 to force GPU.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

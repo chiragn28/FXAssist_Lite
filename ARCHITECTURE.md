@@ -188,6 +188,22 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 - **Decision:** (c) uv. It can install Python 3.11 itself, `uv lock --check` gives CI a one-line lockfile drift check (CI-03), and uv workspaces give each service its own `pyproject.toml` while sharing one `uv.lock`.
 - **Consequences:** contributors need uv (`make bootstrap` checks for it and prints the install command). The repo root is a virtual workspace (`package = false`); services become workspace members from Phase 1. Dockerfiles in Phase 4 install from `uv.lock` with `uv sync --locked`.
 
+### ADR-022: Ollama runs as a container in the compose stack, using the GPU when present
+- **Status:** accepted at the start of Phase 1 (2026-10-06). Refines how ADR-003's "Ollama for local development" is run; the OpenAI-compatible interface is unchanged.
+- **Plain meaning:** instead of installing Ollama on Windows or in Ubuntu, `make up` starts it as one more container, and `make pull-model` downloads the model into a Docker volume.
+- **Context:** Ollama was not installed. Installed on Windows, WSL2 and containers cannot reliably reach it on `localhost` (NAT networking). The dev laptop has an NVIDIA RTX 3060 Laptop GPU (6 GB), and Docker Desktop passes it through to containers (checked with `nvidia-smi` in a container).
+- **Options:** (a) Windows install; (b) native install in Ubuntu; (c) compose service.
+- **Decision:** (c). Pinned `ollama/ollama` image wrapped in a two-line Dockerfile so it runs as a non-root user. GPU is added by an override file when `nvidia-smi` is found (`FXA_GPU=0` forces CPU). The service has its own profile (`llm`): `make up` includes it, `make up-lite` leaves it out for low-RAM machines.
+- **Consequences:** reproducible from the repo with no manual install; containers reach it by service name and WSL2 at `localhost:11434`. Local answer quality is still not representative (Q4 quantised model); reported numbers come only from the GPU lab (ADR-003). Running the model on CPU needs about 3 GB more RAM than the lite budget.
+
+### ADR-023: Embeddings run on ONNX Runtime through fastembed, not PyTorch
+- **Status:** accepted at the start of Phase 1 (2026-10-06). Refines ADR-009 (which fixed the model, not the runtime).
+- **Plain meaning:** the same bge-small model, run by a small, CPU-friendly engine instead of the large PyTorch library.
+- **Context:** `sentence-transformers` pulls in PyTorch, which adds hundreds of MB (GBs with CUDA wheels) to every image that embeds text (the agent, later the gateway). ADR-009 wants embeddings on CPU only.
+- **Options:** (a) sentence-transformers + PyTorch CPU wheels; (b) fastembed (Qdrant's library, ONNX Runtime); (c) a separate embedding server (e.g. Hugging Face TEI).
+- **Decision:** (b) fastembed with `BAAI/bge-small-en-v1.5` (384 dimensions, cosine).
+- **Consequences:** much smaller images and faster cold start. ONNX output can differ from PyTorch in the last decimals, so vectors must never be mixed across runtimes: the collection records the model name, runtime and dimension, and the agent refuses to start on a mismatch (DAT-10).
+
 ---
 
 ## 4. Cost model

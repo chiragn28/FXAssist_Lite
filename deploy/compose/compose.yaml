@@ -1,8 +1,8 @@
-# Local stack. Phase 0 runs the data stores only; the gateway, mock LLM and
-# observability services are added in Phases 2 and 3.
+# Local stack: data stores and Ollama. The gateway, mock LLM and observability
+# services are added in Phases 2 and 3.
 #
 # Rules every service follows (checked by tests/test_compose.py):
-#   - image pinned to an exact version (docs/VERSIONS.md)
+#   - image (or Dockerfile base image) pinned to an exact version (docs/VERSIONS.md)
 #   - host ports and bind address come from FXA_* variables (ENV-04)
 #   - published only on FXA_BIND_ADDR, 127.0.0.1 by default (OBS-04)
 #   - a memory limit, so the total RAM budget is known (ENV-02)
@@ -10,7 +10,8 @@
 #   - a healthcheck, so `docker compose up --wait` gates on readiness (DEP-04)
 #
 # Profiles (ENV-02): services without a profile are the "lite" set and always start.
-# Heavier services added later get `profiles: [full]` and start only with COMPOSE_PROFILES=full.
+#   llm   Ollama, the local dev model (ADR-022). `make up` enables it; `make up-lite` does not.
+#   full  observability (Phase 3). `make up-full` enables llm and full.
 name: fxassist
 
 x-hardening: &hardening
@@ -84,6 +85,26 @@ services:
       timeout: 3s
       retries: 20
 
+  ollama:
+    <<: *hardening
+    profiles: [llm]
+    build:
+      context: deploy/compose/ollama
+    image: fxassist/ollama:0.35.1
+    ports:
+      - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/ollama
+    user: "1000:1000"
+    # Enough to run the 3B model on CPU; with a GPU the weights sit in GPU memory instead.
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
 volumes:
   qdrant_data:
   pg_data:
+  ollama_data:

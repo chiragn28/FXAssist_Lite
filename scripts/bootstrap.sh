@@ -182,21 +182,29 @@ else
          "free space, or prune Docker: docker system prune"
 fi
 
-# --- Later phases ---------------------------------------------------------------
-section "Later phases"
-# ENV-03 (Phase 1): Ollama serves the local dev model.
-OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
-if has ollama || curl -fsS --max-time 2 "$OLLAMA_URL/api/tags" >/dev/null 2>&1; then
-    if curl -fsS --max-time 2 "$OLLAMA_URL/api/tags" >/dev/null 2>&1; then
-        ok "Ollama reachable at $OLLAMA_URL"
-    else
-        need 1 "Ollama installed but not reachable at $OLLAMA_URL" \
-             "start it (ollama serve), or set OLLAMA_URL if it runs on the Windows host"
-    fi
+# --- Local model (ADR-022, ENV-03) ----------------------------------------------
+# Ollama runs as a compose container, so there is nothing to install: these are warnings
+# about stack state, each with the command that fixes it.
+section "Local model"
+env_value() { grep -E "^$1=" "$REPO_ROOT/.env" 2>/dev/null | tail -n1 | cut -d= -f2-; }
+MODEL="${FXA_LLM_MODEL:-$(env_value FXA_LLM_MODEL)}"; MODEL="${MODEL:-qwen2.5:3b-instruct}"
+PORT="${FXA_OLLAMA_PORT:-$(env_value FXA_OLLAMA_PORT)}"; PORT="${PORT:-11434}"
+OLLAMA_URL="http://localhost:$PORT"
+if tags="$(curl -fsS --max-time 2 "$OLLAMA_URL/api/tags" 2>/dev/null)"; then
+    ok "Ollama reachable at $OLLAMA_URL"
+    if [[ "$tags" == *"\"$MODEL\""* ]]; then ok "model $MODEL pulled"
+    else warn "model $MODEL not pulled yet" "make pull-model"; fi
 else
-    need 1 "Ollama (local dev model server)" "curl -fsSL https://ollama.com/install.sh | sh"
+    warn "Ollama not running at $OLLAMA_URL" "make up   # then, once: make pull-model"
+fi
+if gpu="$(nvidia-smi -L 2>/dev/null | head -n1)" && [[ -n "$gpu" ]]; then
+    ok "NVIDIA GPU visible: ${gpu%% (UUID*} (Ollama will use it)"
+else
+    warn "no NVIDIA GPU visible: Ollama will run on CPU (slower; needs about 3 GB more RAM)"
 fi
 
+# --- Later phases ---------------------------------------------------------------
+section "Later phases"
 if has kind;    then ok "kind";    else need 4 "kind (local Kubernetes)" "see https://kind.sigs.k8s.io/docs/user/quick-start/#installation"; fi
 if has kubectl; then ok "kubectl"; else need 4 "kubectl" "see https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/"; fi
 if has helm;    then ok "helm";    else need 4 "helm" "see https://helm.sh/docs/intro/install/"; fi
