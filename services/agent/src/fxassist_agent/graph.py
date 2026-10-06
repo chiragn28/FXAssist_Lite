@@ -39,6 +39,7 @@ from .embeddings import Embedder
 from .guards import check_question
 from .llm import ChatLLM, LLMError
 from .store import Hit, StoreUnavailableError, VectorStore
+from .tracing import tracer
 
 log = logging.getLogger(__name__)
 
@@ -239,9 +240,13 @@ class Agent:
                 }
             if control is not None:
                 control.stage(name)
-            started = self.deps.clock()
-            update = fn(state)
-            update["steps"] = [{"node": name, "seconds": round(self.deps.clock() - started, 3)}]
+            with tracer.start_as_current_span(f"agent.{name}") as span:
+                started = self.deps.clock()
+                update = fn(state)
+                seconds = round(self.deps.clock() - started, 3)
+                if update.get("outcome"):
+                    span.set_attribute("fxa.outcome", update["outcome"])
+            update["steps"] = [{"node": name, "seconds": seconds}]
             return update
 
         return run
@@ -442,7 +447,8 @@ class Agent:
             "steps": [],
         }
         try:
-            state = self.graph.invoke(initial, {"recursion_limit": self.s.max_graph_steps})
+            with tracer.start_as_current_span("agent.ask"):
+                state = self.graph.invoke(initial, {"recursion_limit": self.s.max_graph_steps})
         except GraphRecursionError:  # RET-09: step cap
             state = {
                 **initial,

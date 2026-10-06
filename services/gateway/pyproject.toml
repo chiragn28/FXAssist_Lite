@@ -10,8 +10,10 @@ dependencies = [
     "uvicorn>=0.54.0",
     "redis>=8.1.0",                     # cache and rate limit (ADR-010)
     "psycopg[binary,pool]>=3.3.6",      # API keys and request log (ADR-011)
-    "opentelemetry-api>=1.45.1",        # metric call sites; exporters are configured in Phase 3
+    "opentelemetry-api>=1.45.1",        # metrics and traces (ADR-012)
     "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-prometheus>=0.66b1",       # /metrics for Prometheus (OBS-04)
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",  # optional traces to Langfuse (DEP-03)
 ]
 
 [project.scripts]

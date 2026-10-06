@@ -40,8 +40,10 @@ class GatewayServer(uvicorn.Server):
 
 def serve(settings: GatewaySettings) -> None:
     from .app import configure_logging, create_app
+    from .telemetry import setup_telemetry
 
     configure_logging(os.environ.get("FXA_LOG_LEVEL", "INFO"))
+    tracer_provider = setup_telemetry(settings)
     app = create_app(settings)
     config = uvicorn.Config(
         app,
@@ -52,7 +54,10 @@ def serve(settings: GatewaySettings) -> None:
         proxy_headers=False,
         server_header=False,
     )
-    GatewayServer(config, on_drain=lambda: setattr(app.state, "draining", True)).run()
+    try:
+        GatewayServer(config, on_drain=lambda: setattr(app.state, "draining", True)).run()
+    finally:
+        tracer_provider.shutdown()  # flushes queued spans, bounded by the export timeout
 
 
 async def _with_store(settings: GatewaySettings, fn):

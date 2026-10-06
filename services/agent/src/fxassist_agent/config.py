@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     llm_max_context_tokens: int = 4096  # Ollama's default context window
     llm_max_output_tokens: int = 400
     grader_enabled: bool = True
+    trace_content: bool = False  # OBS-02: prompts and answers on spans only when switched on
 
     # --- Agent safety caps (RET-09) ---
     max_graph_steps: int = 12

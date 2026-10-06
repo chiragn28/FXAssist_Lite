@@ -6,12 +6,66 @@ from __future__ import annotations
 import json
 
 from opentelemetry import metrics as otel_metrics
+from opentelemetry import trace as otel_trace
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-# One MeterProvider for the whole session (the global can only be set once).
+from fxassist_gateway.telemetry import histogram_views
+
+# One MeterProvider and one TracerProvider for the whole session (globals can be set once).
 METRICS = InMemoryMetricReader()
-otel_metrics.set_meter_provider(MeterProvider(metric_readers=[METRICS]))
+otel_metrics.set_meter_provider(MeterProvider(metric_readers=[METRICS], views=histogram_views()))
+
+
+class FanOutProcessor(SpanProcessor):
+    """Lets a test attach an extra span processor (e.g. a broken exporter) and remove it."""
+
+    def __init__(self) -> None:
+        self.processors: list[SpanProcessor] = []
+
+    def on_start(self, span, parent_context=None) -> None:
+        for p in list(self.processors):
+            p.on_start(span, parent_context)
+
+    def on_end(self, span) -> None:
+        for p in list(self.processors):
+            p.on_end(span)
+
+    def shutdown(self) -> None:
+        for p in list(self.processors):
+            p.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return all(p.force_flush(timeout_millis) for p in list(self.processors))
+
+
+SPANS = InMemorySpanExporter()
+EXTRA_SPAN_PROCESSORS = FanOutProcessor()
+_tracer_provider = TracerProvider()
+_tracer_provider.add_span_processor(SimpleSpanProcessor(SPANS))
+_tracer_provider.add_span_processor(EXTRA_SPAN_PROCESSORS)
+otel_trace.set_tracer_provider(_tracer_provider)
+
+
+def metric_points():
+    """Every (metric name, attributes, point) recorded so far."""
+    data = METRICS.get_metrics_data()
+    for rm in data.resource_metrics if data else []:
+        for sm in rm.scope_metrics:
+            for metric in sm.metrics:
+                for point in metric.data.data_points:
+                    yield metric.name, dict(point.attributes), point
+
+
+def histogram_points(name: str, **attributes: str) -> list:
+    return [
+        p
+        for n, attrs, p in metric_points()
+        if n == name and all(attrs.get(k) == v for k, v in attributes.items())
+    ]
 
 
 def metric_total(name: str, **attributes: str) -> float:

@@ -34,9 +34,12 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 import httpx
+from opentelemetry.propagate import inject
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from .control import LLMCallStats, RunControl
 from .prompts import estimate_tokens
+from .tracing import content_for_span, tracer
 
 log = logging.getLogger(__name__)
 
@@ -292,7 +295,9 @@ class OpenAICompatLLM:
         clock: Callable[[], float] = time.monotonic,
         rng: Callable[[], float] = random.random,
         transport: httpx.BaseTransport | None = None,
+        trace_content: bool = False,
     ):
+        self.trace_content = trace_content
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_s = timeout_s
@@ -400,6 +405,43 @@ class OpenAICompatLLM:
         json_mode: bool = False,
         control: RunControl | None = None,
     ) -> str:
+        """One chat completion, traced as a `gen_ai` client span (names Langfuse understands)."""
+        with tracer.start_as_current_span("llm.chat", kind=SpanKind.CLIENT) as span:
+            span.set_attribute("gen_ai.operation.name", "chat")
+            span.set_attribute("gen_ai.request.model", self.model)
+            span.set_attribute("gen_ai.request.max_tokens", max_tokens)
+            span.set_attribute("fxa.call_kind", "json" if json_mode else "text")
+            if self.trace_content:  # OBS-02: off unless the operator switches it on
+                span.set_attribute("gen_ai.prompt", content_for_span(messages[-1]["content"]))
+            calls_before = len(control.llm_calls) if control is not None else 0
+            try:
+                text = self._complete(messages, max_tokens, temperature, json_mode, control)
+            except LLMError as exc:
+                span.set_status(Status(StatusCode.ERROR, exc.code))
+                span.set_attribute("error.type", exc.code)
+                raise
+            finally:
+                if control is not None and len(control.llm_calls) > calls_before:
+                    stats = control.llm_calls[calls_before]
+                    span.set_attribute("fxa.attempts", stats.attempts)
+                    if stats.ttft_s is not None:
+                        span.set_attribute("fxa.ttft_s", round(stats.ttft_s, 4))
+                    if stats.completion_tokens is not None:
+                        span.set_attribute("gen_ai.usage.output_tokens", stats.completion_tokens)
+                    if stats.prompt_tokens is not None:
+                        span.set_attribute("gen_ai.usage.input_tokens", stats.prompt_tokens)
+            if self.trace_content:
+                span.set_attribute("gen_ai.completion", content_for_span(text))
+            return text
+
+    def _complete(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+        json_mode: bool,
+        control: RunControl | None,
+    ) -> str:
         self.check_length(messages, max_tokens)
         body = self._body(messages, max_tokens, temperature, json_mode)
         started = self._clock()
@@ -411,8 +453,13 @@ class OpenAICompatLLM:
             control.llm_calls.append(stats)
         while True:
             if control is not None and control.cancelled():
+                stats.error = LLMCancelledError.code
                 raise LLMCancelledError("request cancelled")
-            self.breaker.before_call()
+            try:
+                self.breaker.before_call()
+            except CircuitOpenError:
+                stats.error = CircuitOpenError.code  # refused without a network call
+                raise
             attempts += 1
             stats.attempts = attempts
             try:
@@ -484,8 +531,10 @@ class OpenAICompatLLM:
         timeout = timeout or self._timeout
         result = StreamResult()
         try:
+            headers: dict[str, str] = {}
+            inject(headers)  # W3C traceparent: the model server's spans join this trace
             with self._client.stream(
-                "POST", "/chat/completions", json=body, timeout=timeout
+                "POST", "/chat/completions", json=body, timeout=timeout, headers=headers
             ) as response:
                 if response.status_code in RETRYABLE_STATUS:
                     raise _Retryable(

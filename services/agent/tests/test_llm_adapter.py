@@ -218,9 +218,12 @@ def test_llm04_circuit_opens_and_fails_fast(server, mock) -> None:
     with pytest.raises(LLMUnavailableError):
         llm.complete(MESSAGES, max_tokens=5)
     assert breaker.state == "open" and stats(mock)["requests"] == 3
+    control = RunControl()
     with pytest.raises(CircuitOpenError) as info:
-        llm.complete(MESSAGES, max_tokens=5)
+        llm.complete(MESSAGES, max_tokens=5, control=control)
     assert stats(mock)["requests"] == 3  # no network call while open
+    # Counted as a failed call, not "ok" (found by the hanging-model drill, 2026-10-07).
+    assert control.llm_calls[0].error == "llm_circuit_open"
     assert 0 < info.value.retry_after <= 60
 
 

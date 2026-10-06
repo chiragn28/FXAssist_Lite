@@ -59,6 +59,16 @@ class GatewaySettings(Settings):
     index_info_ttl_s: float = 5.0  # corpus version is re-read at most this often
     shutdown_grace_s: float = 30.0
 
+    # --- Observability (ADR-012, Phase 3) ---
+    metrics_host: str = "127.0.0.1"  # 0.0.0.0 inside containers; never published (OBS-04)
+    metrics_port: int = 9464
+    otlp_traces_endpoint: str | None = None  # any OTLP/HTTP traces URL
+    otlp_headers: SecretStr = SecretStr("")  # "key=value,key2=value2"; may hold credentials
+    langfuse_public_key: str = ""  # optional Langfuse Cloud free tier
+    langfuse_secret_key: SecretStr = SecretStr("")
+    langfuse_host: str = "https://cloud.langfuse.com"
+    trace_export_timeout_s: float = 2.0  # DEP-03: a slow tracing backend costs at most this
+
     @property
     def resolved_redis_url(self) -> str:
         return self.redis_url or f"redis://localhost:{self.redis_port}/0"

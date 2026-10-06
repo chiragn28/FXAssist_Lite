@@ -58,6 +58,7 @@ def build_llm(settings: Settings) -> OpenAICompatLLM:
         backoff_max_s=settings.llm_backoff_max_s,
         max_context_tokens=settings.llm_max_context_tokens,
         breaker=CircuitBreaker(settings.llm_breaker_failures, settings.llm_breaker_reset_s),
+        trace_content=settings.trace_content,
     )
 
 

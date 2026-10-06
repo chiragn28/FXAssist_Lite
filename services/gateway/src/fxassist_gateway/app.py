@@ -28,6 +28,9 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import context as otel_context
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from fxassist_agent.control import RunControl
@@ -36,6 +39,7 @@ from fxassist_agent.graph import Agent, AgentDeps
 from fxassist_agent.llm import OpenAICompatLLM
 from fxassist_agent.prompts import PROMPT_VERSION
 from fxassist_agent.store import StoreError, VectorStore
+from fxassist_agent.tracing import content_for_span
 
 from . import metrics
 from .answers import cache_key, payload, ttl_for
@@ -50,6 +54,7 @@ from .runner import AgentRunner, Flight, Flights, RunOutcome
 from .sse import KEEPALIVE, EventStreamResponse, event
 
 log = logging.getLogger(__name__)
+tracer = trace.get_tracer("fxassist.gateway")
 
 
 # --- Request model (API-03) -----------------------------------------------------------------
@@ -274,6 +279,9 @@ async def build_components(settings: GatewaySettings) -> Components:
         qdrant.close()
 
     components.closers.append(close)
+    from .telemetry import register_gauges
+
+    register_gauges(components)
     return components
 
 
@@ -312,10 +320,31 @@ def run_timings(run: RunOutcome) -> dict[str, Any]:
 
 
 def record_run_metrics(run: RunOutcome) -> None:
+    """OBS-05: each stage recorded on its own, so a slow total can be attributed."""
+    metrics.stage_duration.record(run.queue_s, {"stage": "queue"})
+    for step in run.result.steps:
+        if step["node"] == "retrieve" and not step.get("skipped"):
+            metrics.stage_duration.record(step["seconds"], {"stage": "retrieval"})
+    llm_total = 0.0
     for call in run.control.llm_calls:
         metrics.llm_calls.add(1, {"kind": call.kind, "result": call.error or "ok"})
         if call.malformed_chunks:
             metrics.llm_malformed_chunks.add(call.malformed_chunks)
+        llm_total += call.total_s or 0.0
+        if call.completion_tokens:
+            metrics.llm_output_tokens.add(call.completion_tokens, {"kind": call.kind})
+        if call.kind != "text" or call.error is not None:
+            continue
+        if call.ttft_s is not None:
+            metrics.stage_duration.record(call.ttft_s, {"stage": "ttft"})
+        generating = (call.total_s or 0.0) - (call.ttft_s or 0.0)
+        if call.completion_tokens and call.completion_tokens > 1 and generating > 0:
+            # Decode speed: tokens after the first, over the time after the first token.
+            metrics.llm_tokens_per_second.record(
+                (call.completion_tokens - 1) / generating, {"kind": call.kind}
+            )
+    if run.control.llm_calls:
+        metrics.stage_duration.record(llm_total, {"stage": "llm"})
     if run.result.truncated:
         metrics.truncations.add(run.result.truncated)
 
@@ -340,12 +369,23 @@ class RequestRecord:
             "coalesced": False,
             "streamed": False,
         }
+        # The request's span. Its context is handed to the agent run explicitly, because the
+        # run happens in another task and then a worker thread.
+        # FastAPI (0.142+) already emits its own HTTP server span; this one carries the
+        # FXAssist view of the request (outcome, cache, coalescing) and parents the agent spans.
+        self.span = tracer.start_span("fxassist.ask", kind=SpanKind.INTERNAL)
+        self.span.set_attribute("fxa.request_id", request_id)
+        self.trace_context = trace.set_span_in_context(self.span)
+        self._finished = False
 
     def question(self, text: str) -> None:
         self.fields["question_sha256"] = hashlib.sha256(text.encode()).hexdigest()
         self.fields["question_chars"] = len(text)
+        self.span.set_attribute("fxa.question_chars", len(text))
         if self.settings.log_questions:  # OBS-02: off by default
             self.fields["question_text"] = text[:500]
+        if self.settings.trace_content:
+            self.span.set_attribute("input.value", content_for_span(text))
 
     def error(self, err: ApiError) -> None:
         self.fields.update(status=err.status, error_code=err.code)
@@ -354,17 +394,35 @@ class RequestRecord:
     def finish(self, logs: RequestLogWriter) -> None:
         from .db import now_utc
 
-        self.fields["total_ms"] = round((time.monotonic() - self.started) * 1000)
+        if self._finished:
+            return
+        self._finished = True
+        seconds = time.monotonic() - self.started
+        self.fields["total_ms"] = round(seconds * 1000)
         self.fields["ts"] = now_utc()
+        outcome = self.fields.get("outcome") or "none"
+        cached = str(bool(self.fields["cached"])).lower()
         metrics.requests.add(
             1,
             {
                 "route": self.fields["route"],
                 "status": str(self.fields["status"]),
-                "outcome": self.fields.get("outcome") or "none",
+                "outcome": outcome,
             },
         )
+        if self.fields["status"] == 200:
+            metrics.request_duration.record(seconds, {"outcome": outcome, "cached": cached})
         logs.submit(dict(self.fields))
+        status = self.fields["status"]
+        self.span.set_attribute("http.response.status_code", status)
+        self.span.set_attribute("fxa.outcome", outcome)
+        self.span.set_attribute("fxa.cached", self.fields["cached"])
+        self.span.set_attribute("fxa.coalesced", self.fields["coalesced"])
+        if self.fields.get("error_code"):
+            self.span.set_attribute("error.type", self.fields["error_code"])
+        if status >= 500:
+            self.span.set_status(Status(StatusCode.ERROR, self.fields.get("error_code")))
+        self.span.end()
 
 
 # --- The app ------------------------------------------------------------------------------------
@@ -503,7 +561,9 @@ def create_app(
                 ask_request.question, corpus_version, PROMPT_VERSION, settings.model_id
             )
             cached = await c.cache.get(key_)
-            compute = make_compute(c, ask_request.question, key_, corpus_version)
+            compute = make_compute(
+                c, ask_request.question, key_, corpus_version, record.trace_context
+            )
             if ask_request.stream:
                 streaming = True
                 record.fields["streamed"] = True
@@ -534,11 +594,15 @@ def create_app(
 
 
 def make_compute(
-    c: Components, question: str, key: str, corpus_version: str
+    c: Components, question: str, key: str, corpus_version: str, trace_context
 ) -> Callable[[Flight], Awaitable[Computed]]:
     async def compute(flight: Flight) -> Computed:
         flight.publish("queued")
-        run = await c.runner.run(question, flight.publish)
+        token = otel_context.attach(trace_context)  # agent spans become children of the request
+        try:
+            run = await c.runner.run(question, flight.publish)
+        finally:
+            otel_context.detach(token)
         record_run_metrics(run)
         result = run.result
         if result.outcome == "error":
@@ -642,8 +706,11 @@ def stream_response(
 
 
 def configure_logging(level: str = "INFO") -> None:
+    from .telemetry import RedactingFilter
+
     handler = logging.StreamHandler()
     handler.addFilter(RequestIdFilter())
+    handler.addFilter(RedactingFilter())  # OBS-02: no keys or passwords in any log line
     handler.setFormatter(
         logging.Formatter("%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s")
     )

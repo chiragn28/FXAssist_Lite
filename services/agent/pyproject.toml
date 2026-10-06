@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.28.1",                     # downloads and the OpenAI-compatible LLM client
     "pydantic-settings>=2.15.0",         # FXA_* configuration from env and .env
     "pyyaml>=6.0.3",                     # source registry and eval set
+    "opentelemetry-api>=1.45.1",         # spans per graph node and LLM call (no-op without an SDK)
 ]
 
 [project.scripts]
