@@ -1,5 +1,11 @@
 """Request IDs (API-06) and draining during shutdown (API-08), as plain ASGI middleware.
 
+Draining: once SIGTERM arrives, uvicorn stops accepting connections and readiness reports
+"shutting_down". Requests that still arrive come over keep-alive connections opened earlier.
+They are served, with `Connection: close`, so the client's next request opens a new connection
+to a pod that is not stopping. (The first version answered them 503; the kind rollout test showed
+that turns every rolling update into user-visible errors.)
+
 Plain ASGI, not Starlette's BaseHTTPMiddleware: that one wraps the response body in its own
 stream, which gets in the way of streaming and of noticing client disconnects.
 """
@@ -7,7 +13,6 @@ stream, which gets in the way of streaming and of noticing client disconnects.
 from __future__ import annotations
 
 import contextvars
-import json
 import logging
 import re
 import uuid
@@ -55,37 +60,13 @@ class RequestContextMiddleware:
 
         async def send_with_id(message: Message) -> None:
             if message["type"] == "http.response.start":
-                message["headers"] = [*message.get("headers", []), header]
+                extra = [header]
+                if self.draining():  # send the client to another pod for its next request
+                    extra.append((b"connection", b"close"))
+                message["headers"] = [*message.get("headers", []), *extra]
             await send(message)
 
         try:
-            if self.draining() and scope.get("path") not in ("/healthz", "/readyz"):
-                await self._reject_draining(send_with_id, request_id)
-                return
             await self.app(scope, receive, send_with_id)
         finally:
             request_id_var.reset(token)
-
-    @staticmethod
-    async def _reject_draining(send: Send, request_id: str) -> None:
-        body = json.dumps(
-            {
-                "error": {
-                    "code": "shutting_down",
-                    "message": "This instance is shutting down. Please retry.",
-                    "request_id": request_id,
-                }
-            }
-        ).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 503,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"retry-after", b"1"),
-                    (b"connection", b"close"),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})

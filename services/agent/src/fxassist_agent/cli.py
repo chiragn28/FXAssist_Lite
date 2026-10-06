@@ -26,7 +26,7 @@ def build_embedder(settings: Settings) -> FastEmbedder:
     return FastEmbedder(
         settings.embed_model,
         settings.embed_dim,
-        cache_dir=settings.data_dir / "cache" / "fastembed",
+        cache_dir=settings.embed_cache_dir or settings.data_dir / "cache" / "fastembed",
         batch_size=settings.embed_batch_size,
     )
 

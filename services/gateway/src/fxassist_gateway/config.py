@@ -58,6 +58,7 @@ class GatewaySettings(Settings):
     ready_timeout_s: float = 5.0
     index_info_ttl_s: float = 5.0  # corpus version is re-read at most this often
     shutdown_grace_s: float = 30.0
+    debug_startup_delay_s: float = 0.0  # K8S-01 drill only: pretend startup is slow
 
     # --- Observability (ADR-012, Phase 3) ---
     metrics_host: str = "127.0.0.1"  # 0.0.0.0 inside containers; never published (OBS-04)

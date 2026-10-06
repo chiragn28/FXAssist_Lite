@@ -437,6 +437,9 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if settings.debug_startup_delay_s:  # K8S-01 drill: a slow start must not be killed
+            log.warning("debug: delaying startup by %.0fs", settings.debug_startup_delay_s)
+            await asyncio.sleep(settings.debug_startup_delay_s)
         components = await factory(settings)
         app.state.c = components
         tasks = [asyncio.create_task(job()) for job in components.background]

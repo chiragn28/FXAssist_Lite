@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     embed_model: str = "BAAI/bge-small-en-v1.5"
     embed_dim: int = 384
     embed_batch_size: int = 64
+    embed_cache_dir: Path | None = None  # default: <data_dir>/cache/fastembed
 
     # --- Chunking (DAT-09: defaults chosen by `make experiment`, see LEARNING.md) ---
     chunk_size: int = 1000

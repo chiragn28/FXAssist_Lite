@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 # Each service is a uv workspace member with its own dependencies (ADR-021), so every
 # image installs only what it needs. The root depends on them for local development.
-dependencies = ["fxassist-agent", "fxassist-gateway", "fxassist-mock-llm"]
+dependencies = ["fxassist-agent", "fxassist-gateway", "fxassist-mock-llm", "fxassist-watchdog"]
 
 [dependency-groups]
 dev = [
@@ -25,12 +25,13 @@ package = false
 required-version = ">=0.8.4"
 
 [tool.uv.workspace]
-members = ["services/agent", "services/gateway", "services/mock_llm"]
+members = ["services/agent", "services/gateway", "services/mock_llm", "services/watchdog"]
 
 [tool.uv.sources]
 fxassist-agent = { workspace = true }
 fxassist-gateway = { workspace = true }
 fxassist-mock-llm = { workspace = true }
+fxassist-watchdog = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -52,14 +53,16 @@ select = [
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["fxassist_agent", "fxassist_gateway", "fxassist_mock_llm", "bench", "conftest", "agent_helpers", "gw_helpers"]
+known-first-party = ["fxassist_agent", "fxassist_gateway", "fxassist_mock_llm", "fxassist_watchdog", "bench", "conftest", "agent_helpers", "gw_helpers"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use assert and run subprocesses on purpose.
 "**/tests/**" = ["S101", "S603", "S607"]
+# Operator scripts call docker, kubectl and helm on purpose.
+"scripts/**" = ["S603", "S607"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "services/agent/tests", "services/gateway/tests", "services/mock_llm/tests"]
+testpaths = ["tests", "services/agent/tests", "services/gateway/tests", "services/mock_llm/tests", "services/watchdog/tests"]
 addopts = "-ra --strict-markers"
 pythonpath = ["."]  # so tests can import bench/ and scripts/ helpers
 filterwarnings = [

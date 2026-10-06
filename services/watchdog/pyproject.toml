@@ -1,0 +1,17 @@
+[project]
+name = "fxassist-watchdog"
+version = "0.1.0"
+description = "Canary watchdog: restarts the LLM deployment after repeated canary failures (ADR-014)."
+requires-python = ">=3.11"
+# Versions verified on 2026-10-06 (docs/VERSIONS.md); exact pins live in uv.lock.
+# No Kubernetes client library: three REST calls do not justify its size.
+dependencies = [
+    "httpx>=0.28.1",
+]
+
+[project.scripts]
+fxassist-watchdog = "fxassist_watchdog.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.13"]
+build-backend = "uv_build"

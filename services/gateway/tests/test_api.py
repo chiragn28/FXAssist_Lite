@@ -308,6 +308,7 @@ async def test_api07_client_that_stops_reading_is_cut_off() -> None:
 
 
 def test_api08_in_flight_requests_finish_and_new_ones_are_refused(gw) -> None:
+    """In-flight work finishes; new connections are refused; readiness says shutting down."""
     import signal
 
     gw.mock_config(token_ms=60)  # about 1.5s of generation
@@ -322,9 +323,10 @@ def test_api08_in_flight_requests_finish_and_new_ones_are_refused(gw) -> None:
     assert gw.app.state.draining
     try:
         late = gw.ask(QUESTION)
-        assert late.status_code == 503 and late.json()["error"]["code"] == "shutting_down"
+        # Got in before the listener closed: served, but told to reconnect elsewhere.
+        assert late.status_code == 200 and late.headers["connection"] == "close"
     except httpx.TransportError:
-        pass  # refused or reset while the listening socket closes: also a refusal
+        pass  # refused or reset because the listening socket is closed
     worker.join(10)
     assert result["r"].status_code == 200 and result["r"].json()["outcome"] == "answered"
     gw.server.thread.join(10)
@@ -405,3 +407,14 @@ def test_llm07_quirky_server_format_still_answers_end_to_end(gw) -> None:
     body = gw.ask(QUESTION).json()
     assert body["outcome"] == "answered" and "30:1" in body["answer"]
     assert metric_total("fxa_llm_malformed_chunks") > 0
+
+
+def test_api08_draining_reports_not_ready_but_still_serves_open_connections(gw) -> None:
+    gw.app.state.draining = True  # what SIGTERM sets
+    with gw.client() as c:
+        ready = c.get("/readyz")
+        answer = c.post(
+            "/v1/ask", json={"question": QUESTION, "stream": False}, headers=gw.headers()
+        )
+    assert ready.status_code == 503 and ready.json()["status"] == "shutting_down"
+    assert answer.status_code == 200 and answer.headers["connection"] == "close"

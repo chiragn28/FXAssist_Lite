@@ -237,6 +237,15 @@ def create_app(behaviour: Behaviour | None = None) -> FastAPI:
     async def stats() -> dict:
         return state["stats"].model_dump()
 
+    @app.post("/_mock/hog")
+    async def hog(mb: int = 64) -> dict:
+        """K8S-02 drill: hold `mb` MiB of memory until the process dies (e.g. OOMKilled)."""
+        block = bytearray(mb * 1024 * 1024)
+        for i in range(0, len(block), 4096):  # touch every page so it is really resident
+            block[i] = 1
+        state.setdefault("hog", []).append(block)
+        return {"held_mib": sum(len(b) for b in state["hog"]) // (1024 * 1024)}
+
     def should_fail(b: Behaviour) -> bool:
         if b.error_status is None:
             return False

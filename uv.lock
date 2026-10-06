@@ -14,6 +14,7 @@ members = [
     "fxassist-gateway",
     "fxassist-lite",
     "fxassist-mock-llm",
+    "fxassist-watchdog",
 ]
 
 [[package]]
@@ -446,6 +447,7 @@ dependencies = [
     { name = "fxassist-agent" },
     { name = "fxassist-gateway" },
     { name = "fxassist-mock-llm" },
+    { name = "fxassist-watchdog" },
 ]
 
 [package.dev-dependencies]
@@ -462,6 +464,7 @@ requires-dist = [
     { name = "fxassist-agent", editable = "services/agent" },
     { name = "fxassist-gateway", editable = "services/gateway" },
     { name = "fxassist-mock-llm", editable = "services/mock_llm" },
+    { name = "fxassist-watchdog", editable = "services/watchdog" },
 ]
 
 [package.metadata.requires-dev]
@@ -487,6 +490,17 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.142.2" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
+
+[[package]]
+name = "fxassist-watchdog"
+version = "0.1.0"
+source = { editable = "services/watchdog" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.28.1" }]
 
 [[package]]
 name = "googleapis-common-protos"
