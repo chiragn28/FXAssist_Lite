@@ -1,5 +1,4 @@
-# Local stack: data stores and Ollama. The gateway, mock LLM and observability
-# services are added in Phases 2 and 3.
+# Local stack: data stores, the gateway, the mock LLM and Ollama. Observability joins in Phase 3.
 #
 # Rules every service follows (checked by tests/test_compose.py):
 #   - image (or Dockerfile base image) pinned to an exact version (docs/VERSIONS.md)
@@ -10,7 +9,8 @@
 #   - a healthcheck, so `docker compose up --wait` gates on readiness (DEP-04)
 #
 # Profiles (ENV-02): services without a profile are the "lite" set and always start.
-#   llm   Ollama, the local dev model (ADR-022). `make up` enables it; `make up-lite` does not.
+#   llm   Ollama, the local dev model (ADR-022). `make up` enables it and points the gateway at
+#         it; `make up-lite` does not, and the gateway uses the mock LLM instead.
 #   full  observability (Phase 3). `make up-full` enables llm and full.
 name: fxassist
 
@@ -103,6 +103,61 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+
+  # Misbehaving OpenAI-compatible server for drills, CI and the lite stack (ADR-003, LLM-09).
+  mock-llm:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: services/mock_llm/Dockerfile
+    image: fxassist/mock-llm:0.2.0
+    environment:
+      FXA_MOCK_MODELS: mock-llm
+    ports:
+      - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_MOCK_LLM_PORT:-8081}:8080"
+    user: "10001:10001"
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  gateway:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    image: fxassist/gateway:0.2.0
+    # No depends_on: the gateway starts in any order and reports what is missing on /readyz
+    # (DEP-04). The compose healthcheck is liveness (/healthz): on a fresh clone the collection
+    # is not ingested yet and the model may not be pulled, which `up --wait` must not wait for.
+    # Scripts that need a ready gateway poll /readyz (make demo, make drill).
+    environment:
+      FXA_QDRANT_URL: http://qdrant:6333
+      FXA_REDIS_URL: redis://redis:6379/0
+      FXA_POSTGRES_HOST: postgres
+      FXA_POSTGRES_PORT: "5432"
+      FXA_POSTGRES_USER: ${FXA_POSTGRES_USER:-fxassist}
+      FXA_POSTGRES_DB: ${FXA_POSTGRES_DB:-fxassist}
+      FXA_POSTGRES_PASSWORD: ${FXA_POSTGRES_PASSWORD:?set FXA_POSTGRES_PASSWORD in .env}
+      FXA_LLM_BASE_URL: ${FXA_GATEWAY_LLM_BASE_URL:-http://mock-llm:8080/v1}
+      FXA_LLM_MODEL: ${FXA_GATEWAY_LLM_MODEL:-mock-llm}
+      FXA_CACHE_ENABLED: ${FXA_CACHE_ENABLED:-true}
+    ports:
+      - "${FXA_BIND_ADDR:-127.0.0.1}:${FXA_GATEWAY_PORT:-8000}:8000"
+    user: "10001:10001"
+    # fastembed + ONNX Runtime + the agent (measured: see docs/VERSIONS.md, Phase 2).
+    mem_limit: 1g
+    # API-08: compose sends SIGTERM, then waits this long before SIGKILL. Longer than the
+    # gateway's own 30 s grace period, so in-flight requests can finish.
+    stop_grace_period: 35s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
 volumes:
   qdrant_data:

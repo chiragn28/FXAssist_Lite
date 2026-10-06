@@ -1,0 +1,12 @@
+# The build context is the repo root (images need uv.lock and the workspace). Send only what
+# the images use: no virtualenv, raw documents, caches, eval runs or secrets.
+**
+!pyproject.toml
+!uv.lock
+!services/agent/pyproject.toml
+!services/agent/src/**
+!services/gateway/pyproject.toml
+!services/gateway/src/**
+!services/mock_llm/pyproject.toml
+!services/mock_llm/src/**
+**/__pycache__

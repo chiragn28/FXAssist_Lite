@@ -12,8 +12,9 @@ SERVICES = COMPOSE["services"]
 
 # ENV-02: documented minimum Docker memory for the lite profile (README, bootstrap.sh).
 LITE_BUDGET_MIB = 4 * 1024
-# Headroom for the gateway, agent and embedding model that join the lite set in Phase 2.
-APP_RESERVE_MIB = 2 * 1024
+# Headroom for commands run beside the stack (ingestion embeds on the host). The gateway and
+# mock LLM are in the lite set since Phase 2, so their limits are counted directly.
+APP_RESERVE_MIB = 1024
 
 PORT_RE = re.compile(r"^\$\{FXA_BIND_ADDR:-127\.0\.0\.1\}:\$\{FXA_[A-Z_]+_PORT:-\d+\}:\d+$")
 
@@ -65,25 +66,38 @@ def test_saf08_runs_as_non_root(name: str) -> None:
     assert "no-new-privileges:true" in service.get("security_opt", [])
 
 
-def base_image(service: dict) -> str:
-    """The pinned upstream image: `image`, or the FROM line of the service's Dockerfile."""
+def dockerfile_of(service: dict) -> Path:
+    build = service["build"]
+    return ROOT / build["context"] / build.get("dockerfile", "Dockerfile")
+
+
+def base_images(service: dict) -> list[str]:
+    """The pinned upstream images: `image`, or every FROM in the service's Dockerfile."""
     if "build" not in service:
-        return service["image"]
-    dockerfile = ROOT / service["build"]["context"] / "Dockerfile"
-    froms = re.findall(r"^FROM\s+(\S+)", dockerfile.read_text(), re.M)
-    assert len(froms) == 1, f"{dockerfile}: expected exactly one FROM line"
-    return froms[0]
+        return [service["image"]]
+    text = dockerfile_of(service).read_text()
+    stages = set(re.findall(r"^FROM\s+\S+\s+AS\s+(\S+)", text, re.M | re.I))
+    froms = [f for f in re.findall(r"^FROM\s+(\S+)", text, re.M) if f not in stages]
+    assert froms, f"{dockerfile_of(service)}: no FROM line"
+    return froms
 
 
 @pytest.mark.parametrize("name", SERVICES)
 def test_images_pinned_to_exact_version(name: str) -> None:
     """Rule 3: no floating tags; every version is recorded in docs/VERSIONS.md."""
-    image = base_image(SERVICES[name])
-    repo, _, tag = image.rpartition(":")
-    # PostgreSQL releases are major.minor since v10, so "18.6" is already an exact release.
-    pattern = r"\d+\.\d+$" if repo == "postgres" else r"v?\d+\.\d+\.\d+"
-    assert re.match(pattern, tag), f"{name}: {image} is not pinned to an exact release"
-    assert image in (ROOT / "docs/VERSIONS.md").read_text(), f"{image} missing from VERSIONS.md"
+    for image in base_images(SERVICES[name]):
+        repo, _, tag = image.rpartition(":")
+        # PostgreSQL releases are major.minor since v10, so "18.6" is already an exact release.
+        pattern = r"\d+\.\d+$" if repo == "postgres" else r"v?\d+\.\d+\.\d+"
+        assert re.match(pattern, tag), f"{name}: {image} is not pinned to an exact release"
+        assert image in (ROOT / "docs/VERSIONS.md").read_text(), f"{image} missing from VERSIONS.md"
+
+
+@pytest.mark.parametrize("name", [n for n, s in SERVICES.items() if "build" in s])
+def test_saf08_own_images_switch_to_a_non_root_user(name: str) -> None:
+    text = dockerfile_of(SERVICES[name]).read_text()
+    final_stage = text[text.rfind("\nFROM ") :]
+    assert re.search(r"^USER\s+[1-9]\d*", final_stage, re.M), f"{name}: final stage runs as root"
 
 
 def test_adr022_ollama_is_optional_and_gpu_is_an_override() -> None:

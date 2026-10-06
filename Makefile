@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 MAKEFLAGS += --no-print-directory
 
 # Raise this as phases are completed; `make bootstrap` then requires those tools.
-PHASE ?= 1
+PHASE ?= 2
 
 # Use .env when present, otherwise the committed defaults (ENV-04: ports come from here).
 ENV_FILE ?= $(if $(wildcard .env),.env,.env.example)
@@ -29,7 +29,8 @@ endef
 
 .PHONY: help bootstrap install lint fmt test secrets-scan check \
         up up-lite up-full pull-model down down-volumes ps logs \
-        fetch ingest ask eval experiment sources-md kind-up kind-deploy demo
+        fetch ingest ask eval experiment sources-md \
+        serve mock-llm api-key drill kind-up kind-deploy demo
 
 ##@ Setup
 help: ## Show this help
@@ -65,15 +66,21 @@ check: lint test ## Everything CI runs that needs no Docker
 	uv lock --check
 
 ##@ Local stack (Docker Compose)
-up: ## Start data stores and Ollama (GPU if available), wait until healthy
-	@echo "Ollama GPU: $(if $(filter 1,$(FXA_GPU)),on,off) (set FXA_GPU=0 or 1 to override)"
-	COMPOSE_PROFILES=llm $(COMPOSE) up -d --wait --build
+# Which model server the gateway container talks to: Ollama with `make up`, the mock otherwise.
+WITH_OLLAMA := FXA_GATEWAY_LLM_BASE_URL=http://ollama:11434/v1 FXA_GATEWAY_LLM_MODEL=$(FXA_LLM_MODEL)
+WITH_MOCK := FXA_GATEWAY_LLM_BASE_URL=http://mock-llm:8080/v1 FXA_GATEWAY_LLM_MODEL=mock-llm
+FXA_GATEWAY_PORT ?= 8000
+GATEWAY_URL := http://127.0.0.1:$(FXA_GATEWAY_PORT)
 
-up-lite: ## Start the data stores only, for low-RAM machines (ENV-02)
-	$(COMPOSE) up -d --wait
+up: ## Start data stores, gateway, mock LLM and Ollama (GPU if available)
+	@echo "Ollama GPU: $(if $(filter 1,$(FXA_GPU)),on,off) (set FXA_GPU=0 or 1 to override)"
+	$(WITH_OLLAMA) COMPOSE_PROFILES=llm $(COMPOSE) up -d --wait --build
+
+up-lite: ## Start without Ollama: the gateway answers with the mock LLM (ENV-02)
+	$(WITH_MOCK) $(COMPOSE) up -d --wait --build
 
 up-full: ## Start everything, including observability from Phase 3
-	COMPOSE_PROFILES=llm,full $(COMPOSE) up -d --wait --build
+	$(WITH_OLLAMA) COMPOSE_PROFILES=llm,full $(COMPOSE) up -d --wait --build
 
 pull-model: ## Download the local dev model into Ollama (FXA_LLM_MODEL)
 	COMPOSE_PROFILES=llm $(COMPOSE) exec ollama ollama pull $(FXA_LLM_MODEL)
@@ -111,6 +118,21 @@ experiment: ## Retrieval-only chunk size x top-k experiment (DAT-09)
 sources-md: ## Regenerate data/SOURCES.md from data/sources.yaml
 	$(FXA) sources-md
 
+##@ API (Phase 2)
+serve: ## Run the gateway on the host instead of in compose (port FXA_GATEWAY_PORT)
+	uv run fxassist-gateway serve
+
+mock-llm: ## Run the mock LLM on the host (port 8080)
+	uv run fxassist-mock-llm
+
+api-key: NAME ?= local-dev
+api-key: ## Create an API key (printed once): make api-key NAME=alice
+	@uv run fxassist-gateway create-key --name "$(NAME)"
+
+drill: ## Stop Redis, PostgreSQL and Qdrant one by one and check the gateway (needs make up)
+	@key=$$(uv run fxassist-gateway create-key --name drill 2>/dev/null) && \
+	uv run python scripts/drill.py --gateway $(GATEWAY_URL) --key "$$key" --compose "$(COMPOSE)"
+
 ##@ Kubernetes (Phase 4)
 kind-up: ## Create the local kind cluster
 	$(call not_yet,4)
@@ -119,5 +141,14 @@ kind-deploy: ## Build, load and deploy the Helm chart to kind
 	$(call not_yet,4)
 
 ##@ Demo
-demo: ## End-to-end demo of the whole system
-	$(call not_yet,2)
+demo: LLM ?= mock
+demo: ## End-to-end demo: stack, ingest, key, questions (LLM=ollama for the real model)
+	@if [ "$(LLM)" = "ollama" ]; then \
+		$(WITH_OLLAMA) COMPOSE_PROFILES=llm $(COMPOSE) up -d --wait --build && \
+		COMPOSE_PROFILES=llm $(COMPOSE) exec ollama ollama pull $(FXA_LLM_MODEL); \
+	else \
+		$(WITH_MOCK) $(COMPOSE) up -d --wait --build; \
+	fi
+	$(FXA) ingest
+	@key=$$(uv run fxassist-gateway create-key --name demo 2>/dev/null) && \
+	uv run python scripts/demo.py --gateway $(GATEWAY_URL) --key "$$key"

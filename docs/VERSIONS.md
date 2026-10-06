@@ -42,6 +42,26 @@ Python packages: lower bounds in `services/agent/pyproject.toml`, exact versions
 | Local model | `qwen2.5:3b-instruct` (Q4_K_M, 2.2 GB in GPU memory) | Same model family as the GPU lab (ADR-005), quantised for a 6 GB laptop GPU | Tag listed at ollama.com/library/qwen2.5/tags; answered through `/v1/chat/completions` |
 | uv_build | >=0.8.4,<0.13 | Build backend for the workspace member | uv documentation for workspace packages |
 
+## Phase 2: API service
+
+Lower bounds in each service's `pyproject.toml`, exact versions and hashes in `uv.lock`. APIs used were checked in the installed versions (signatures and source inspected, not assumed).
+
+| Component | Version | Why | Verified how (2026-10-06) |
+|---|---|---|---|
+| FastAPI | 0.142.2 | Gateway and mock LLM | PyPI JSON API |
+| Starlette | 1.7.0 (via FastAPI) | `StreamingResponse` checks the ASGI spec version: from 2.4 it relies on send errors instead of listening for `http.disconnect`. The gateway uses its own SSE response that always listens, so disconnects are caught either way (LLM-05) | Source of `StreamingResponse.__call__` read in the installed version |
+| uvicorn | 0.54.0 | ASGI server. Uses `Config(timeout_graceful_shutdown=...)` and overrides `Server.handle_exit(sig, frame)` to set the draining flag (API-08). Signal handlers are only installed on the main thread | Signatures and `capture_signals` source inspected |
+| redis (redis-py) | 8.1.0 | Async client and `register_script`. **Note:** since redis-py 6 the client retries 3 times with backoff by default; the gateway passes `retry=Retry(NoBackoff(), 0)` so its own fail-open policy decides (CAC-01) | `Redis.__init__` source inspected |
+| psycopg / psycopg-binary | 3.3.6 | PostgreSQL driver (ADR-011) | PyPI |
+| psycopg-pool | 3.3.3 | `AsyncConnectionPool(open=False, timeout=..., reconnect_timeout=...)`, `open(wait=False)`: the pool connects in the background so the gateway starts without PostgreSQL (DEP-04) | Signature inspected |
+| opentelemetry-api / -sdk | 1.45.1 | Metric instruments now; exporters in Phase 3. Tests read counters with `InMemoryMetricReader` | PyPI (released the same day; re-check before Phase 3) |
+| fakeredis (dev) | 2.39.0, with `lupa` 2.8 | Redis for offline tests, including the Lua token bucket and `TIME` | PyPI; Lua script runs in tests |
+| uv (in images) | `ghcr.io/astral-sh/uv:0.12.23` | Copied into the build stage only | GitHub releases API; image pulled |
+| Python base image | `python:3.11.17-slim-trixie` | Matches `.python-version` (3.11), Debian 13 slim | Docker Hub tags API; images built |
+| Ollama streaming format | as served by 0.35.1 | Captured for the mock's `ollama` flavour: first chunk has `role` and content, an empty-delta chunk carries `finish_reason`, then a `choices: []` usage chunk (with `stream_options.include_usage`), then `[DONE]`. Unknown model: HTTP 404 with an OpenAI-style error body | `curl` against the running server |
+
+Measured sizes (2026-10-06): gateway image about 590 MB of content (virtualenv 402 MB, of which ONNX Runtime 68 MB, NumPy 74 MB, ingestion-only libraries such as lxml and Babel about 50 MB; embedding model 65 MB; Python base). Gateway resident memory 347 MiB after the demo. Mock LLM 44 MiB.
+
 ## Later phases: planned, re-check before pinning
 
 | Component | Latest seen | Phase | Notes |
