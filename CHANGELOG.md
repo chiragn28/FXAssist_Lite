@@ -2,6 +2,27 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Phase 4: Containers, Helm, kind, reliability (2026-10-07)
+
+### Added
+- Helm chart `deploy/helm/fxassist` (Helm 4, chart apiVersion v2): gateway (2 replicas, startup/readiness/liveness probes, preStop drain, PDB, HPA, read-only root filesystem, metrics on a ClusterIP-only Service), mock LLM, Qdrant and PostgreSQL StatefulSets, Redis, a per-revision ingestion Job, and the watchdog CronJob with a Role limited to one Deployment. Base values plus small kind and CI overrides.
+- `services/watchdog` (`fxassist-watchdog`): canary prompt with content and latency checks, restart policy as a pure function (3 consecutive failures, 10 min cooldown, 2 restarts per hour), state in a Deployment annotation, three REST calls instead of a Kubernetes client library.
+- kind cluster config pinned to the node image by digest; Make targets `images`, `image-budget`, `kind-up`, `kind-load`, `kind-deploy`, `kind-key`, `kind-status`, `kind-rbac-check`, `kind-watchdog-drill`, `kind-rollout-test`, `helm-check`, `kind-down`.
+- Scripts: `kind-secrets.sh`, `kind_rbac_check.sh`, `kind_watchdog_drill.py`, `kind_rollout_test.py`, `kind_proxy_check.sh`, `helm_diff.py`, `image_budget.py`.
+- Debug knobs for drills: `FXA_DEBUG_STARTUP_DELAY_S` (gateway), `POST /_mock/hog` (mock LLM).
+- Runbooks `pod-oomkilled.md` and `watchdog-restart-loop.md`.
+- 45 new tests (watchdog policy, canary and API calls; rendered-chart checks).
+
+### Changed
+- Draining (API-08): requests on open keep-alive connections are served with `Connection: close` instead of 503.
+- The gateway image carries `data/sources.yaml` for the ingestion Job; `FXA_EMBED_CACHE_DIR` lets ingestion use a writable work directory while the model stays baked in.
+- `make bootstrap` defaults to Phase 4.
+
+### Fixed during the phase
+- Ingestion OOMKilled at 1.5 GiB on kind: embedding batch 16 in the Job (peak about 931 MiB).
+- `kind load docker-image` fails with Docker's containerd image store: load single-platform archives instead.
+- The rollout test's key check passed against one pod while the other had not refreshed its key snapshot yet (ADR-025): it now requires a run of successes over fresh connections.
+
 ## Phase 3: Observability (2026-10-07)
 
 ### Added

@@ -238,3 +238,45 @@ The first version of the rules ("circuit open for 1 minute", "timeouts above 3 p
    Measure it where the model call happens: from sending the generation request to the first content token, with streaming on. Record queue time, retrieval time and total time as separate histograms, so a slow total can be attributed. Prove it with a test that injects a known first-token delay and checks only TTFT moves.
 3. *Your LLM backend died but no alert fired. Why could that happen, and what would you alert on?*
    Caching and circuit breakers protect users and hide the failure from user-facing metrics: cached answers keep succeeding, and the breaker turns slow timeouts into fast, intermittent errors that "open for N minutes" rules miss because of half-open trials. Alert on the dependency itself: the failure ratio of model calls, and "the breaker has not closed in N minutes". Then drill it: break the model on purpose and check that the alert fires.
+
+---
+
+## Phase 4: Containers, Helm, kind, reliability
+
+### Concepts and decisions
+
+- **A Helm chart is templated YAML plus a values file.** Templates hold the structure (Deployments, Services, probes); `values.yaml` holds every setting in one place; an environment file overrides only what differs (kind: 3 keys, CI: 9 keys). `make helm-check` renders the chart for each environment and prints the diff, so "works on kind, broken in CI" differences are visible in review (K8S-09). Helm 4 is a new major version: `--atomic` became `--rollback-on-failure`, and `--wait` now uses kstatus to decide "ready".
+
+- **Requests and limits are different promises.** A *request* is what the scheduler reserves for the pod; a *limit* is where the kernel steps in: CPU over its limit is throttled, memory over its limit is killed (OOMKilled, exit code 137). Limits came from measurements: the gateway uses about 350 MiB, so it requests 512 Mi and is killed at 1 Gi. The first deploy proved the point unplanned: ingestion was OOMKilled three times at 1.5 GiB. The fix was the cause (embedding batch 64 -> 16, peak about 931 MiB), not a bigger limit.
+
+- **Three probes, three questions.** *Startup*: has it finished starting? (protects slow starts; liveness waits until it passes). *Readiness*: should it get traffic now? (dependencies included, so a pod that lost Qdrant leaves the Service). *Liveness*: is it stuck and should be restarted? (process only, never dependencies, or a database blip restarts every pod). Tested on kind: a 60 s slow start survives a 180 s startup budget with 0 restarts, and is killed twice in 150 s with a 30 s budget.
+
+- **Zero-downtime rollouts take four pieces together.** `maxUnavailable: 0` (start a new pod before stopping an old one), readiness (traffic only to pods that are ready), a `preStop` sleep (keep serving a few seconds while kube-proxy removes the pod from the Service), and the app's own draining. The first rollout test still failed one request in 17: my "draining" mode answered 503 to requests arriving on an already-open keep-alive connection. Serving them with `Connection: close` (so the client reconnects to another pod) fixed it: 0 failures in 3 runs in a row.
+
+- **RBAC is least privilege you can prove.** The watchdog's Role names one resource: `get` and `patch` on `deployments/fxassist-mock-llm`. `make kind-rbac-check` asks the API server 17 questions as the watchdog (`kubectl auth can-i --as=...`): it can restart its one Deployment; it cannot read secrets, list pods, touch the gateway or act in another namespace. Every other pod has `automountServiceAccountToken: false`, so it holds no API credentials at all.
+
+- **A watchdog needs hysteresis, or it becomes the outage.** Restarting on the first failure turns a slow model into a restart loop that never finishes loading. Rules: warn first, restart only after 3 consecutive failures, then a 10-minute cooldown and a cap of 2 restarts per hour, after which a human must look. The decision is a pure function, so a test can simulate a whole broken hour in milliseconds. On kind, the drill showed exactly one restart, then "suppressed" when the new pod was broken again. CronJob pods are fresh each run, so the state lives in an annotation on the watched Deployment.
+
+- **Secrets never pass through Helm values.** Values files are committed and end up in `helm get values`, so the chart only references a Secret by name, and a script creates it from the local `.env` (K8S-06). A test fails if any values key looks like a password, token or key.
+
+- **kind is real Kubernetes in a container, with its own quirks.** Images must be loaded into the node (no registry), and `kind load docker-image` broke with Docker's newer containerd image store; exporting one platform with `docker save --platform` and `kind load image-archive` works. kind writes its own kubeconfig file here, so the laptop's other kubectl contexts are untouched.
+
+### Measured on kind (2026-10-07, one node, WSL2, no GPU)
+
+| What | Value |
+|---|---|
+| Full ingestion Job (26 downloads, 727 chunks) inside `helm upgrade --wait --wait-for-jobs` | 5 min; peak memory about 931 MiB with batch 16 |
+| Rolling restart of 2 gateway pods under traffic | 12-18 s; 0 failed requests in 3 consecutive runs |
+| Watchdog: broken model to restart | 3 CronJob runs (about 2 min), then cooldown held |
+| Mock LLM OOMKilled -> ready | 8 s |
+| SSE through nginx 1.30.5 (default buffering) | first progress event 0.05-0.15 s, answer 0.65-0.76 s: streamed |
+| Images (compressed) | gateway 234 MB, mock LLM 51 MB, watchdog 47 MB |
+
+### Interview questions I can now answer
+
+1. *A pod keeps restarting. How do you find out why, and what if its logs are gone?*
+   `kubectl describe pod` and `get pod -o jsonpath` for `lastState.terminated.reason` and exit code (137 = SIGKILL, usually OOMKilled), plus events. If the pod was deleted (a failed Job), the node's kernel log still records cgroup OOM kills with the process's memory use. Then fix the cause (here, batch size), not just the limit.
+2. *How do you roll out a new version without dropping requests?*
+   maxUnavailable 0 and a surge pod, a readiness probe that reflects real readiness, a preStop sleep so endpoint removal propagates before SIGTERM, a grace period longer than the app's drain time, and an app that finishes in-flight work and sends `Connection: close` on open keep-alive connections. Then prove it: traffic during `kubectl rollout restart`, count failures.
+3. *You want an automatic "restart the model server when it hangs" job. What could go wrong, and how do you make it safe?*
+   Restart loops (the restart does not fix the cause, or the model needs longer to load than the check allows), false positives from slow but healthy models, and a job with permissions to break everything. Use a canary with content and latency checks, N consecutive failures, a cooldown, an hourly cap that hands over to humans, structured logs of every decision, and RBAC limited to the one Deployment, verified with `kubectl auth can-i`.

@@ -2,7 +2,7 @@
 
 A zero-cost, self-hosted LLM platform that answers questions over public forex/CFD documentation, with citations. Built to learn and demonstrate LLMOps skills: vLLM serving and GPU tuning, RAG with Qdrant, LangGraph, observability, Kubernetes with Helm, and reliability engineering.
 
-> **Status: Phase 3 (observability) complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose. No Kubernetes deployment or GPU results yet. See [Project status](#project-status).
+> **Status: Phase 4 (Kubernetes on kind) complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose, and on a local kind cluster with a Helm chart, probes, an autoscaler and a canary watchdog. No GPU results yet. See [Project status](#project-status).
 
 ## Honest limits
 
@@ -92,6 +92,19 @@ make eval           # evaluation set against the local model
 make down
 ```
 
+### Kubernetes (kind)
+
+```bash
+make down           # free memory: kind runs its own copies of everything
+make kind-up        # one-node cluster (own kubeconfig: ~/.kube/kind-fxassist) + metrics-server
+make kind-deploy    # build and load images, create the Secret from .env, helm install, ingest (~5 min)
+make kind-key       # an API key; the gateway is on http://127.0.0.1:8080
+make kind-rbac-check kind-rollout-test kind-watchdog-drill   # the Phase 4 proofs
+make kind-down
+```
+
+Chart and design: [deploy/helm/README.md](deploy/helm/README.md).
+
 API reference: [services/gateway/README.md](services/gateway/README.md). Metrics, dashboard, alerts and tracing: [observability/README.md](observability/README.md).
 
 Example:
@@ -130,7 +143,7 @@ Services are published on `127.0.0.1` only, so they are not reachable from your 
 | lite (`make up-lite`) | data stores, gateway and mock LLM (no real model) | 4 GiB minimum |
 | mock (`make up-mock`) | lite plus Prometheus and Grafana, no model download | 4 GiB |
 | default (`make up`) | everything: lite plus Ollama (the gateway uses it), Prometheus and Grafana. With an NVIDIA GPU the model sits in GPU memory; on CPU it needs about 3 GB more RAM | 4 GiB with a GPU, 7 GiB without |
-| kind (Phase 4) | the whole stack inside a local Kubernetes cluster | 8 GiB |
+| kind (`make kind-deploy`) | the whole stack inside a local Kubernetes cluster (stop compose first) | 4 GiB; measured 2026-10-07: 2.1 GiB for the whole kind node, of which 803 MiB are our pods |
 
 These budgets are estimates and will be replaced with measurements in Phases 3 and 4. Measured (2026-10-06/07): gateway 349 MiB, Grafana 217 MiB, Qdrant 94 to 184 MiB, Prometheus 59 MiB, PostgreSQL 48 MiB, mock LLM 45 MiB, Redis 13 MiB; about 825 MiB for everything except Ollama, which uses 2.1 GiB with the 3B model.
 To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconfig`, then run `wsl --shutdown`.
@@ -143,7 +156,7 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | 1 | RAG core: ingestion, Qdrant, LangGraph agent, eval set | Done |
 | 2 | FastAPI gateway, cache, rate limit, LLM adapter, mock LLM | Done |
 | 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Done (Langfuse export configured but not tried against a real account) |
-| 4 | Containers, Helm, kind, watchdog | Not started |
+| 4 | Containers, Helm, kind, watchdog | Done |
 | 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Not started |
 | 6 | GPU session 1 (single T4) | Not started |
 | 7 | GPU session 2 (2x T4, tensor parallel) | Not started |
