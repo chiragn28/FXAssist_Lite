@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # --- Qdrant (ADR-008). The URL is derived from the compose port unless set. ---
     qdrant_http_port: int = 6333
     qdrant_url: str | None = None
+    qdrant_path: Path | None = None  # embedded local mode, no server (ADR-008: GPU notebook)
     collection: str = "fxassist_docs"
 
     # --- Embeddings (ADR-009, ADR-023) ---

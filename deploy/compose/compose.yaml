@@ -110,7 +110,7 @@ services:
     build:
       context: .
       dockerfile: services/mock_llm/Dockerfile
-    image: fxassist/mock-llm:0.2.0
+    image: fxassist/mock-llm:0.4.0
     environment:
       FXA_MOCK_MODELS: mock-llm
       # Realistic-looking timing and token usage, so dashboards have something to show.
@@ -130,7 +130,7 @@ services:
     build:
       context: .
       dockerfile: services/gateway/Dockerfile
-    image: fxassist/gateway:0.2.0
+    image: fxassist/gateway:0.4.0
     # No depends_on: the gateway starts in any order and reports what is missing on /readyz
     # (DEP-04). The compose healthcheck is liveness (/healthz): on a fresh clone the collection
     # is not ingested yet and the model may not be pulled, which `up --wait` must not wait for.

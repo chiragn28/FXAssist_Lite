@@ -1,6 +1,10 @@
-# Phase 0 CI: the minimum needed for SAF-07 (secret scan in CI) and ENV-05 (bootstrap on a
-# clean machine). Phase 5 extends this with image builds, Helm and the kind integration test.
-# No secrets, no GPU, no paid API (CI-02, CI-05), so pull requests from forks pass too.
+# CI (ADR-015, Phase 5). On every push to main and every pull request, including from forks:
+# no secrets, no GPU, no paid API, no external model (CI-02, CI-05). Everything runs against the
+# mock LLM.
+#
+# Tools are downloaded from their official releases and checked against published SHA-256
+# sums, instead of third-party actions: fewer moving parts in the supply chain, and the same
+# pinned versions as docs/VERSIONS.md.
 name: ci
 
 on:
@@ -17,11 +21,16 @@ concurrency:
 
 env:
   GITLEAKS_VERSION: 8.30.1
+  HELM_VERSION: 4.3.0
+  KIND_VERSION: 0.33.0
+  KUBECTL_VERSION: 1.37.1
+  TRIVY_VERSION: 0.75.0
 
 jobs:
   checks:
+    name: lint, tests, lockfile, secrets, helm
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -30,7 +39,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10
 
       - name: Bootstrap check on a clean runner (ENV-05)
-        run: make bootstrap
+        run: make bootstrap PHASE=0
 
       - name: Install locked dependencies
         run: uv sync --locked
@@ -38,11 +47,31 @@ jobs:
       - name: Lockfile is up to date (CI-03)
         run: uv lock --check
 
+      - name: Install Helm
+        run: |
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          sha256sum --check "helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          tar -xzf "helm-v${HELM_VERSION}-linux-amd64.tar.gz" linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+
       - name: Lint
         run: make lint
 
+      # No fixed sleeps, random free ports, readiness polling (CI-01). The GPU-lab dry run in
+      # mock mode is part of the suite (bench/tests).
       - name: Test
         run: make test
+
+      - name: Helm lint and per-environment diff (K8S-09)
+        run: make helm-check
+
+      - name: No secrets in Helm values (K8S-06)
+        run: |
+          if grep -rniE '(password|token|secret|api[_-]?key)\s*:\s*[^ {]' deploy/helm --include='values*.yaml' \
+              | grep -v 'secretName:'; then
+            echo "secret-like value in a Helm values file"; exit 1
+          fi
 
       - name: Secret scan of full history (SAF-07)
         run: |
@@ -56,3 +85,95 @@ jobs:
 
       - name: Compose file is valid
         run: docker compose --project-directory . -f deploy/compose/compose.yaml --env-file .env.example config --quiet
+
+  images:
+    name: build images, size budget, vulnerability scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+
+      - name: Build images (multi-stage, non-root)
+        run: make images
+
+      - name: Image size budget (CI-04)
+        run: make image-budget
+
+      # SAF-08: reported, not blocking. A finding in a base image should be reviewed and
+      # fixed by bumping the pinned version, not hidden by failing every unrelated PR.
+      - name: Vulnerability scan (Trivy, report only)
+        run: |
+          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tarball="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "${base}/${tarball}"
+          curl -fsSLO "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " ${tarball}\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum --check
+          tar -xzf "${tarball}" trivy
+          for image in fxassist/gateway:0.4.0 fxassist/mock-llm:0.4.0 fxassist/watchdog:0.4.0; do
+            ./trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+              --exit-code 0 --no-progress --format table "$image" | tee -a trivy-report.txt
+          done
+          {
+            echo '### Trivy: HIGH and CRITICAL with a fix available (report only)'
+            echo '```'
+            grep -E '^(fxassist|Total:)' trivy-report.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  kind-e2e:
+    name: kind integration test (mock LLM)
+    needs: [checks]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+
+      - name: Install kind, kubectl and Helm (checksums verified)
+        run: |
+          curl -fsSLO "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64"
+          curl -fsSLO "https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VERSION}/kind-linux-amd64.sha256sum"
+          sha256sum --check kind-linux-amd64.sha256sum
+          sudo install -m 0755 kind-linux-amd64 /usr/local/bin/kind
+          curl -fsSLO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "$(curl -fsSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256")  kubectl" | sha256sum --check
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+          curl -fsSLO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          sha256sum --check "helm-v${HELM_VERSION}-linux-amd64.tar.gz.sha256sum"
+          tar -xzf "helm-v${HELM_VERSION}-linux-amd64.tar.gz" linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+
+      - name: Install locked dependencies (for the test scripts)
+        run: uv sync --locked
+
+      - name: Create the cluster
+        run: make kind-up
+
+      - name: Deploy (builds and loads images; the ingestion Job downloads the public documents)
+        run: |
+          cp .env.example .env
+          make kind-deploy HELM_ARGS="-f deploy/helm/fxassist/values-ci.yaml"
+
+      - name: Ask a question through the gateway
+        run: |
+          key="$(make -s kind-key | tail -1)"
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $key" http://127.0.0.1:8080/v1/info)
+            [ "$code" = 200 ] && break; sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/v1/ask -H "Authorization: Bearer $key" \
+            -d '{"question": "What is a margin call?", "stream": false}' | tee answer.json
+          python3 -c "import json; d = json.load(open('answer.json')); assert d['outcome'] == 'answered', d"
+
+      - name: Watchdog RBAC is limited to one deployment (K8S-05)
+        run: make kind-rbac-check
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          export KUBECONFIG="$HOME/.kube/kind-fxassist"
+          kubectl -n fxassist get pods,jobs,events -o wide || true
+          kubectl -n fxassist logs deploy/fxassist-gateway --tail=100 || true
+          kubectl -n fxassist logs job/fxassist-ingest-1 --tail=100 || true

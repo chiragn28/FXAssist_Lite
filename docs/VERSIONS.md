@@ -90,8 +90,15 @@ Binaries installed into `~/.local/bin` (user-level, no sudo) from the official r
 
 **kind with Docker's containerd image store:** `kind load docker-image` failed with `ctr: content digest ...: not found`, because it exports every platform of an image index. `make kind-load` exports one platform (`docker save --platform linux/amd64`) and runs `kind load image-archive`.
 
-## Later phases: planned, re-check before pinning
+## Phase 5: CI/CD and the GPU lab
 
-| Component | Latest seen | Phase | Notes |
+| Component | Version | Why | Verified how (2026-10-07) |
 |---|---|---|---|
-| vLLM | not checked yet | 5 | Must confirm T4 (compute capability 7.5) and float16 support for the exact version (ADR-006, GPU-01) |
+| vLLM (Kaggle notebook only) | 0.31.0 (2026-10-05) | Latest. Compute capability >= 7.5 (T4 listed). Every CLI flag the lab uses was checked in `vllm serve --help=all` of the installed wheel. On SM 7.5: FlashAttention requires 8.0, FlashInfer is deliberately disabled ("currently broken on SM75"), TRITON_ATTN accepts any: the expected backend is TRITON_ATTN (the smoke test records it). `ignore_eos` exists in the chat completions request model. Startup log formats for memory (`Model loading took`, `Available KV cache memory`, `KV cache size`) read from the source | docs.vllm.ai GPU install page and quantization table; PyPI; the 0.31.0 wheel installed in a throwaway virtualenv (bundled PyTorch, CUDA 12.9 build) |
+| Qwen/Qwen2.5-3B-Instruct | revision `aa8e7253799`, 6.17 GB | ADR-005. `config.json` dtype bfloat16, so `--dtype float16` on a T4 (GPU-02). 36 layers, 2 KV heads, head size 128: 36 KiB of KV cache per token in FP16. **Qwen Research License** (non-commercial) | huggingface.co API, config.json, LICENSE |
+| Qwen/Qwen2.5-3B-Instruct-AWQ | revision `3559b226e8c`, 2.69 GB | 4-bit AWQ GEMM, group size 128; AWQ supported on Turing per vLLM docs. Qwen Research License | huggingface.co API |
+| Qwen/Qwen2.5-7B-Instruct-AWQ (stretch) | revision `b25037543e9`, 5.57 GB | Apache-2.0 | huggingface.co API |
+| Kaggle free tier | | **Unverified** (official pages render client-side); see the table in `docs/KAGGLE_PLAYBOOK.md` | secondary sources only |
+| Trivy | v0.75.0 | Vulnerability scan in CI, report only. Release binary with checksum, not the GitHub Action | GitHub releases API; checksum file; scan run locally: 2 HIGH (setuptools' vendored jaraco.context CVE-2026-23949, wheel CVE-2026-24049) in all images, fixed by removing pip/setuptools/wheel from the runtime stage: 0 after |
+| actionlint | v1.7.12 (docker image) | Workflow lint, run locally | ran clean |
+| GitHub Actions used | `actions/checkout@v7`, `astral-sh/setup-uv@v10` | Only these two; Helm, kind, kubectl, gitleaks and Trivy are downloaded and checksum-verified | GitHub releases API |

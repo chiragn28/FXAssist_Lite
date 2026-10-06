@@ -52,3 +52,7 @@ desktop.ini
 
 # Local evaluation runs (summaries worth keeping are copied into LEARNING.md)
 eval/runs/
+
+# GPU-lab mock dry runs and their scratch space (never results)
+results/mock/
+.lab-scratch/

@@ -173,5 +173,34 @@ class PostgresStore:
             await cur.executemany(sql, rows)
 
 
+def eval_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per-category pass counts and the headline rates of one `fxassist eval` run."""
+    by_category: dict[str, dict[str, int]] = {}
+    for item in items:
+        c = by_category.setdefault(item.get("category", "other"), {"passed": 0, "total": 0})
+        c["total"] += 1
+        c["passed"] += bool(item.get("passed"))
+    retrieval = [i["retrieval_hit"] for i in items if i.get("retrieval_hit") is not None]
+    citations = [i["citation_ok"] for i in items if i.get("citation_ok") is not None]
+    return {
+        "items": len(items),
+        "passed": sum(bool(i.get("passed")) for i in items),
+        "by_category": by_category,
+        "retrieval_hit": {"hit": sum(retrieval), "of": len(retrieval)},
+        "citation_ok": {"ok": sum(citations), "of": len(citations)},
+    }
+
+
+async def add_eval_run(store: PostgresStore, model: str, summary: dict[str, Any]) -> None:
+    """ADR-011: evaluation history, one row per recorded `fxassist eval` run."""
+    from psycopg.types.json import Jsonb
+
+    await store.ensure_schema()
+    async with store.pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO eval_runs (model, summary) VALUES (%s, %s)", (model, Jsonb(summary))
+        )
+
+
 def now_utc() -> datetime:
     return datetime.now(UTC)

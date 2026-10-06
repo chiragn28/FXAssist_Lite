@@ -1,0 +1,32 @@
+# CI-03: dependency drift report, weekly. The lockfile stays as it is; this job only shows
+# what an upgrade would change, so updates are deliberate, reviewed changes (ADR-021).
+name: dependency drift
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+
+      - name: What would `uv lock --upgrade` change?
+        run: |
+          cp uv.lock uv.lock.before
+          uv lock --upgrade 2>&1 | tee upgrade.log
+          {
+            echo '### Python dependencies with newer versions'
+            echo '```'
+            grep -E '^Updated ' upgrade.log || echo 'none'
+            echo '```'
+            echo 'Pinned images, tools and actions are listed in docs/VERSIONS.md: re-check them by hand.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          mv uv.lock.before uv.lock

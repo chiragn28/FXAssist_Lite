@@ -280,3 +280,34 @@ The first version of the rules ("circuit open for 1 minute", "timeouts above 3 p
    maxUnavailable 0 and a surge pod, a readiness probe that reflects real readiness, a preStop sleep so endpoint removal propagates before SIGTERM, a grace period longer than the app's drain time, and an app that finishes in-flight work and sends `Connection: close` on open keep-alive connections. Then prove it: traffic during `kubectl rollout restart`, count failures.
 3. *You want an automatic "restart the model server when it hangs" job. What could go wrong, and how do you make it safe?*
    Restart loops (the restart does not fix the cause, or the model needs longer to load than the check allows), false positives from slow but healthy models, and a job with permissions to break everything. Use a canary with content and latency checks, N consecutive failures, a cooldown, an hourly cap that hands over to humans, structured logs of every decision, and RBAC limited to the one Deployment, verified with `kubectl auth can-i`.
+
+---
+
+## Phase 5: CI/CD and GPU lab preparation
+
+### Concepts and decisions
+
+- **Verify the platform before you pin it.** "vLLM supports the T4" was true and not enough. Reading the installed 0.31.0 source showed which attention kernel a T4 actually gets: FlashAttention needs compute capability 8.0, and FlashInfer is switched off on the T4's 7.5 on purpose ("currently broken on SM75"), so it falls to the Triton backend. Its `--help` confirmed every flag the notebook passes, and that `--dtype auto` would choose bfloat16 for this model, which a T4 cannot run. None of this needed a GPU, and all of it would have cost GPU hours to discover the hard way.
+
+- **Free GPU time is the scarce resource, so the notebook is built like a batch job.** Every result row is appended and `fsync`ed the moment it exists; every stage logs its outcome; finished work is skipped on a rerun; a half-written last line is ignored. A killed session costs only the repetition that was running. Experiments run in priority order inside an hour budget, so a short session still produces the most important numbers.
+
+- **Dry-run everything that does not need the GPU.** The notebook cells only call `bench/lab.py`, and that module has a mock mode: the same code starts the mock LLM instead of vLLM, runs a scaled-down matrix, packs a zip and builds a report. It runs in the test suite and as `make lab-dry-run`. Typos, wrong paths and broken resume logic show up on the laptop, not on Kaggle.
+
+- **A benchmark is a controlled experiment.** Warm-up requests are thrown away (first requests pay for compilation and caches). Output length is fixed (`max_tokens` plus `ignore_eos`), otherwise "tokens per second" compares answers of different lengths. Prompts are fixed and hashed. Three repetitions, median and range. Errors are counted and kept out of latency, or a server that fails fast looks fast. Each experiment changes one setting, enforced in code. FP16 and AWQ get identical load.
+
+- **Know where GPU memory goes.** Weights take a fixed share (FP16 6.2 GB, AWQ 2.7 GB); the rest of vLLM's budget, minus activations, becomes KV cache. For this model one token of KV cache is 2 x 36 layers x 2 KV heads x 128 x 2 bytes = 36 KiB, so about 6.7 GiB holds about 195,000 tokens: roughly 47 requests of 4,096 tokens at once. AWQ's smaller weights buy KV cache, which is why it can matter for throughput even when it is not faster per token. The report reads the real numbers from vLLM's own startup log.
+
+- **CI that a stranger can run.** No secrets anywhere, so a pull request from a fork passes too; read-only token; `pull_request`, never `pull_request_target`, which would run a stranger's code with write access. Tools come from official releases with SHA-256 checks rather than third-party actions, because a compromised action tag runs inside your pipeline. A test enforces these rules on the workflow files.
+
+- **Scan, then fix the cause.** The first Trivy scan found two HIGH CVEs in every image. Both were in the Python base image's own `setuptools` and `wheel`, which nothing uses at runtime. Removing pip, setuptools and wheel from the final stage fixed them all (0 after) and shrank the attack surface. The scan reports instead of blocking: a new CVE in a base image should become a reviewed version bump, not a red build on an unrelated change.
+
+- **Disks fill up; know what your database does then.** A PostgreSQL drill on a tiny volume showed both behaviours: a full table file makes one statement fail while the server stays up; a full write-ahead log makes it stop on purpose rather than risk corruption, and crash recovery replays the log once there is room. Room means at least one 16 MB WAL segment, which a 12 MB "ballast" file did not provide.
+
+### Interview questions I can now answer
+
+1. *How would you benchmark an LLM server so the numbers mean something?*
+   Call the model server directly, cache off. Fixed, hashed prompt sets (short and RAG-sized), fixed output length, warm-up discarded, at least three repetitions with median and spread, p50 and p95 for TTFT and latency, errors counted separately, one knob per experiment, every setting recorded in every row. Then say what it does not show: a T4 is not an H100.
+2. *How do you estimate whether a model and a workload fit on a GPU?*
+   Weights (parameters x bytes per parameter, or the safetensors size) plus KV cache (2 x layers x KV heads x head size x bytes per token, times tokens in flight) plus activation and runtime overhead, all under `gpu_memory_utilization`. Then confirm with the server's own startup log (KV cache size, maximum concurrency at the max length) and an induced OOM to see the failure mode.
+3. *What makes a CI pipeline safe to run on pull requests from forks?*
+   No secrets needed at all; `pull_request` with a read-only token, never `pull_request_target` for untrusted code; tools pinned and checksum-verified; no external paid services; everything mockable. Plus a test or lint that keeps it that way.

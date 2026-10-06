@@ -82,8 +82,8 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | DEP-02 | PostgreSQL is down | Requests still succeed; logs buffered (bounded) or dropped with a metric | stop Postgres | DONE (test_dep02_postgres_down_requests_still_succeed_and_logs_are_buffered, test_dep02_buffer_is_bounded_and_drops_are_counted; `make drill`: the request made during the outage was in the log after recovery) |
 | DEP-03 | Langfuse unreachable or rate-limited | Requests unaffected; tracing exporter times out quickly and drops | block network to Langfuse | DONE (test_dep03_tracing_backend_failures_do_not_touch_requests: refused, 429 and hanging OTLP endpoints, request latency unchanged, shutdown bounded; test_dep03_langfuse_target_is_built_from_settings_without_logging_secrets). Export to real Langfuse Cloud not tested: no account was created |
 | DEP-04 | Services start in the wrong order | Retries with backoff; readiness gates traffic; no crash loops | `docker compose up` cold start | DONE (test_dep04_starts_with_every_dependency_down_then_becomes_ready; manual 2026-10-06: `make down && make up-lite`, no depends_on, gateway ready in 9 s with 0 restarts). Kubernetes probes in Phase 4 |
-| DEP-05 | Disk full on a volume | Clear error, alert metric, no corrupted data | note and manual test | TODO |
-| DEP-06 | Hugging Face download fails in notebook | Retry, resume partial downloads, fail with an actionable message | simulate offline | TODO |
+| DEP-05 | Disk full on a volume | Clear error, alert metric, no corrupted data | note and manual test | DONE (drill 2026-10-07, docs/runbooks/disk-full.md: PostgreSQL on a full volume. Table file full: statement error, server up, data intact, recovers when space is freed. WAL full: PANIC and stop, crash recovery on restart once 16 MB is free. The gateway keeps serving and counts dropped log rows, alert FxaRequestLogDropping). Qdrant disk full not drilled |
+| DEP-06 | Hugging Face download fails in notebook | Retry, resume partial downloads, fail with an actionable message | simulate offline | DONE (test_dep06_download_retries_resumes_and_fails_with_the_fix: 5 attempts with backoff, partial files resumed by snapshot_download, a final error that says what to check; only needed files fetched) |
 
 ## OBS: Observability
 
@@ -113,42 +113,42 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| CI-01 | Flaky tests (timing, ports) | No fixed sleeps; use readiness polling and random free ports | repeat 10 times | TODO |
-| CI-02 | Pull request from a fork | No secrets required; all jobs pass | fork PR | TODO |
-| CI-03 | Dependency drift | Locked dependencies; a scheduled weekly job reports updates | lockfile check | TODO |
-| CI-04 | Docker build cache stale or huge images | Multi-stage builds; image size budget checked | CI size check | TODO |
-| CI-05 | Anything in CI needs a GPU or paid API | Forbidden; CI is fully mockable | review | TODO |
+| CI-01 | Flaky tests (timing, ports) | No fixed sleeps; use readiness polling and random free ports | repeat 10 times | DONE (no fixed sleeps in tests: readiness polling and random free ports, `fxassist_mock_llm.server`; the full suite of about 360 tests ran 16 times on 2026-10-07 with 0 failures; one flaky test found earlier (API-08's late request reset by the closing listener) was fixed). Open, not a test failure: in about 30% of runs the pytest process takes ~60 s longer to exit after the last test. Ruled out: atexit callbacks (timed) and pytest hooks; the main thread sleeps during late interpreter shutdown, likely in a native extension. Not yet bisected by test file CI job timeouts allow for it |
+| CI-02 | Pull request from a fork | No secrets required; all jobs pass | fork PR | TODO: partial. Done: no workflow references secrets, `pull_request` (not `pull_request_target`), read-only token (test_ci02_ci05_no_secrets_no_gpu_read_only). Left: the first real fork PR, after the repo is pushed to GitHub (its remote is a local folder today) |
+| CI-03 | Dependency drift | Locked dependencies; a scheduled weekly job reports updates | lockfile check | DONE (`uv lock --check` in CI; weekly `.github/workflows/dependencies.yml` reports what `uv lock --upgrade` would change without changing it; run locally 2026-10-07: 2 packages had updates; test_ci03_lockfile_check_and_weekly_drift_report) |
+| CI-04 | Docker build cache stale or huge images | Multi-stage builds; image size budget checked | CI size check | DONE (multi-stage images, `make image-budget`: gateway 236/270 MB, mock 53/60, watchdog 49/55 compressed; built and budgeted in CI, test_ci04_images_are_built_budgeted_and_scanned) |
+| CI-05 | Anything in CI needs a GPU or paid API | Forbidden; CI is fully mockable | review | DONE (test_ci02_ci05_no_secrets_no_gpu_read_only, test_ci05_nothing_calls_a_real_model_or_paid_api: standard runners, mock LLM everywhere, the Ollama contract test skips when CI=true) |
 
 ## GPU: Kaggle lab
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| GPU-01 | vLLM version doesn't support T4 | 10 minute smoke test first; pin a compatible version; record in `docs/VERSIONS.md` | smoke test cell | TODO |
-| GPU-02 | Model defaults to bfloat16 | Set float16 explicitly; startup fails loudly if the dtype is unsupported | config check | TODO |
+| GPU-01 | vLLM version doesn't support T4 | 10 minute smoke test first; pin a compatible version; record in `docs/VERSIONS.md` | smoke test cell | DONE (harness): vLLM 0.31.0 checked against its docs and installed source for compute capability 7.5 (docs/VERSIONS.md); `lab.smoke_test` runs first with a 10-minute cap, tries the default backend then TRITON_ATTN, records the backend and that ignore_eos works (test_lab_dry_run_in_mock_mode). First real run: PENDING (Phase 6) |
+| GPU-02 | Model defaults to bfloat16 | Set float16 explicitly; startup fails loudly if the dtype is unsupported | config check | DONE (test_gpu02_every_server_runs_float16_explicitly: `--dtype float16` on every server; the FP16 model's config says bfloat16 and `--dtype auto` would pick it; test_gpu09_gpu10_problems_are_reported_with_the_fix: bf16_supported false for compute capability 7.5) |
 | GPU-03 | Out-of-memory on load or under load | Documented memory formula; knob table (memory utilization, max length, max sequences); runbook | induced OOM drill | TODO |
-| GPU-04 | Library conflicts with preinstalled packages | Isolated virtual environment; pinned versions | clean-notebook run | TODO |
-| GPU-05 | Session killed or times out | Every result row is written to disk immediately; run is resumable from a checkpoint file | kill mid-run | TODO |
-| GPU-06 | Weekly GPU hours exhausted | Session plan with hour budget; priority order of runs; cut stretch goals first | plan in `docs/KAGGLE_PLAYBOOK.md` | TODO |
-| GPU-07 | Only one GPU assigned instead of two | Multi-GPU run skipped with a documented note; nothing crashes | check device count | TODO |
+| GPU-04 | Library conflicts with preinstalled packages | Isolated virtual environment; pinned versions | clean-notebook run | DONE (`lab.make_venv`: vLLM and the eval each in a fresh virtualenv under scratch, pinned versions) |
+| GPU-05 | Session killed or times out | Every result row is written to disk immediately; run is resumable from a checkpoint file | kill mid-run | DONE (test_gpu05_rows_are_on_disk_at_once_and_runs_resume: rows fsync'd per repetition, a cut-off last row ignored and redone; stages.jsonl per stage; test_lab_dry_run_in_mock_mode re-runs and skips finished work) |
+| GPU-06 | Weekly GPU hours exhausted | Session plan with hour budget; priority order of runs; cut stretch goals first | plan in `docs/KAGGLE_PLAYBOOK.md` | DONE (session plan with hour budget and priority order in docs/KAGGLE_PLAYBOOK.md; test_gpu06_hour_budget_stops_new_experiments; MAX_PRIORITY cuts groups) |
+| GPU-07 | Only one GPU assigned instead of two | Multi-GPU run skipped with a documented note; nothing crashes | check device count | DONE (test_gpu07_fewer_than_two_gpus_skips_the_multi_gpu_run, test_gpu07_tensor_parallel_is_skipped_with_one_gpu: recorded as skipped with the GPU count) |
 | GPU-08 | NCCL or peer-to-peer problems on 2 GPUs | Record the exact error, try documented environment workarounds once, then stop and write it up | tensor-parallel attempt | TODO |
-| GPU-09 | Internet disabled in the notebook | Setup cell detects and tells me to enable it (and verify the account if required) | check cell | TODO |
-| GPU-10 | Disk quota exceeded by model files | Download only needed files; clean caches; check free space first | disk check cell | TODO |
-| GPU-11 | Notebook outputs leak tokens (Hugging Face) | Tokens via notebook secrets only; never printed; output cells reviewed before publishing | review | TODO |
-| GPU-12 | Colab used as fallback behaves differently | Notebook parametrised; differences noted | optional | TODO |
+| GPU-09 | Internet disabled in the notebook | Setup cell detects and tells me to enable it (and verify the account if required) | check cell | DONE (test_gpu09_gpu10_problems_are_reported_with_the_fix: no internet stops with the Settings > Internet and phone-verification fix) |
+| GPU-10 | Disk quota exceeded by model files | Download only needed files; clean caches; check free space first | disk check cell | DONE (environment check measures free scratch space against ~17 GB needed; downloads only *.json, *.safetensors and tokenizer files; weights live in /kaggle/tmp, only small results in /kaggle/working) |
+| GPU-11 | Notebook outputs leak tokens (Hugging Face) | Tokens via notebook secrets only; never printed; output cells reviewed before publishing | review | DONE (token read from Kaggle/Colab secrets into the environment only, never printed; test_notebook_is_generated_and_only_calls_tested_code checks no print of it and that the committed notebook has no outputs; playbook says to review outputs before sharing) |
+| GPU-12 | Colab used as fallback behaves differently | Notebook parametrised; differences noted | optional | DONE (the notebook detects Colab: /content paths, google.colab.userdata secrets, files.download). Not run on Colab |
 
 ## BEN: Benchmark validity
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| BEN-01 | Cold start skews results | Warm-up requests discarded | harness check | TODO |
-| BEN-02 | Cache or prefix caching inflates numbers | Cache off; prefix caching reported as an explicit variable | config recorded in every result row | TODO |
-| BEN-03 | Single run noise | At least 3 repetitions; report median and spread | harness | TODO |
-| BEN-04 | Prompt set differs between runs | Fixed prompt file with hash recorded | hash in results | TODO |
-| BEN-05 | Averages hide tail latency | Report p50 and p95 | harness | TODO |
-| BEN-06 | Errors counted as fast successes | Error rate reported; failed requests excluded from latency but shown separately | harness | TODO |
-| BEN-07 | Several knobs changed at once | One variable per experiment; experiment log table | review | TODO |
-| BEN-08 | Output length varies, so tokens per second misleads | Fix max output tokens; report generated token counts | harness | TODO |
-| BEN-09 | Unfair comparison FP16 vs AWQ | Same model, same prompts, same settings, separate runs | review | TODO |
+| BEN-01 | Cold start skews results | Warm-up requests discarded | harness check | DONE (harness: warm-up requests per repetition, discarded; test_ben01_ben08_cell_row_records_fixed_output_and_discards_warmup) |
+| BEN-02 | Cache or prefix caching inflates numbers | Cache off; prefix caching reported as an explicit variable | config recorded in every result row | DONE (harness bypasses the gateway and its cache; vLLM prefix caching off except in its own experiment, recorded in every row; test_ben01_ben08_cell_row_records_fixed_output_and_discards_warmup) |
+| BEN-03 | Single run noise | At least 3 repetitions; report median and spread | harness | DONE (3 repetitions per cell, median and min-max in the report; test_ben03_every_cell_has_at_least_three_repetitions) |
+| BEN-04 | Prompt set differs between runs | Fixed prompt file with hash recorded | hash in results | DONE (prompt sets built from repo files, SHA-256 in every row; test_ben04_prompt_sets_are_fixed_and_hashed) |
+| BEN-05 | Averages hide tail latency | Report p50 and p95 | harness | DONE (p50 and p95, nearest rank, None instead of zero for no data; test_ben05_percentiles_are_nearest_rank_and_never_invented) |
+| BEN-06 | Errors counted as fast successes | Error rate reported; failed requests excluded from latency but shown separately | harness | DONE (errors counted by type and left out of latency; test_ben06_errors_are_counted_and_kept_out_of_latency) |
+| BEN-07 | Several knobs changed at once | One variable per experiment; experiment log table | review | DONE (`check_one_variable` refuses an experiment that changes more than one server setting; test_ben07_each_knob_experiment_changes_one_setting) |
+| BEN-08 | Output length varies, so tokens per second misleads | Fix max output tokens; report generated token counts | harness | DONE (max_tokens 128 plus vLLM's ignore_eos, token counts from usage; smoke test checks exact length; test_ben01_ben08_cell_row_records_fixed_output_and_discards_warmup) |
+| BEN-09 | Unfair comparison FP16 vs AWQ | Same model, same prompts, same settings, separate runs | review | DONE (test_ben09_fp16_and_awq_differ_only_in_the_model: same cells and settings, separate servers) |
 
 ## SAF: Safety, security and domain
 
@@ -161,7 +161,7 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | SAF-05 | Request to reveal system prompt or keys | Refused | fixture | DONE (test_saf04_saf05_refusals_never_reach_the_model; eval r01-r02) |
 | SAF-06 | Every answer must be framed as informational | Standard disclaimer added by the gateway, not by the model | test | DONE (test_saf06_disclaimer_is_on_every_kind_of_answer, test_json_answer_has_citations_and_the_gateway_disclaimer) |
 | SAF-07 | Secrets committed to git | Pre-commit secret scan and CI scan | scan job | DONE (pre-commit gitleaks: test_saf07_precommit_runs_gitleaks; CI full-history scan: test_saf07_ci_scans_full_history; manual: planted token caught). First real CI run pending a push to GitHub |
-| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | TODO: partial. Done: compose services and our own gateway and mock LLM images run non-root with all capabilities dropped (test_saf08_runs_as_non_root, test_saf08_ollama_dockerfile_drops_root, test_saf08_own_images_switch_to_a_non_root_user). Left: vulnerability scan (Phase 5) |
+| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | DONE (compose services and our own gateway and mock LLM images run non-root with all capabilities dropped (test_saf08_runs_as_non_root, test_saf08_ollama_dockerfile_drops_root, test_saf08_own_images_switch_to_a_non_root_user); Trivy v0.75.0 in CI, report only: the first local scan found 2 HIGH CVEs in the base image's setuptools/wheel, fixed by removing pip, setuptools and wheel from the runtime stage, 0 after, 2026-10-07) |
 
 ## ENV: Developer environment
 

@@ -34,6 +34,10 @@ def build_embedder(settings: Settings) -> FastEmbedder:
 def build_store(settings: Settings, embedder) -> VectorStore:
     from qdrant_client import QdrantClient
 
+    if settings.qdrant_path is not None:  # embedded mode: a directory, no server (ADR-008)
+        return VectorStore(
+            QdrantClient(path=str(settings.qdrant_path)), settings.collection, embedder
+        )
     url = settings.resolved_qdrant_url
     client = QdrantClient(url=url, timeout=10)
     try:

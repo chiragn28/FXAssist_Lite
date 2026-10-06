@@ -12,3 +12,4 @@ One runbook per failure drill: symptom, detection, root cause, fix, prevention. 
 | `gpu-oom.md` | 6 | PENDING |
 | `kv-cache-exhaustion.md` | 6 | PENDING |
 | `slow-model-load.md` | 6 | PENDING |
+| [`disk-full.md`](disk-full.md) | 5 | Written from a PostgreSQL disk-full drill (extra, DEP-05) |

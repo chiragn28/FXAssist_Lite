@@ -124,3 +124,20 @@ def test_dep04_starts_with_every_dependency_down_then_becomes_ready(gateway_fact
     gw.mock_config(error_status=None)
     wait_for(lambda: readyz(gw)[1]["status"] == "ready", what="ready without a restart")
     assert gw.ask(QUESTION).status_code == 200
+
+
+def test_adr011_eval_history_summary() -> None:
+    from fxassist_gateway.db import eval_summary
+
+    items = [
+        {"category": "answerable", "passed": True, "retrieval_hit": True, "citation_ok": True},
+        {"category": "answerable", "passed": False, "retrieval_hit": True, "citation_ok": None},
+        {"category": "attack", "passed": True, "retrieval_hit": None, "citation_ok": None},
+    ]
+    s = eval_summary(items)
+    assert s["passed"] == 2 and s["items"] == 3
+    assert s["by_category"] == {
+        "answerable": {"passed": 1, "total": 2},
+        "attack": {"passed": 1, "total": 1},
+    }
+    assert s["retrieval_hit"] == {"hit": 2, "of": 2} and s["citation_ok"] == {"ok": 1, "of": 1}

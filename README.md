@@ -2,7 +2,7 @@
 
 A zero-cost, self-hosted LLM platform that answers questions over public forex/CFD documentation, with citations. Built to learn and demonstrate LLMOps skills: vLLM serving and GPU tuning, RAG with Qdrant, LangGraph, observability, Kubernetes with Helm, and reliability engineering.
 
-> **Status: Phase 4 (Kubernetes on kind) complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose, and on a local kind cluster with a Helm chart, probes, an autoscaler and a canary watchdog. No GPU results yet. See [Project status](#project-status).
+> **Status: Phases 0 to 5 complete; GPU results PENDING.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose, and on a local kind cluster with a Helm chart, probes, an autoscaler and a canary watchdog. The GPU-lab notebook (vLLM on a free T4) is built and dry-run against a mock; it has not been run on a GPU yet, so there are no benchmark results. See [Project status](#project-status).
 
 ## Honest limits
 
@@ -34,7 +34,7 @@ flowchart TB
     end
     subgraph LAB[Kaggle notebook: free GPU lab, self-contained]
         V[vLLM on T4 GPU] --> B[Benchmark and eval harness]
-        B --> R[results CSV and markdown]
+        B --> R[result files: JSONL and markdown]
     end
     R -->|downloaded and committed| LOCAL
 ```
@@ -105,6 +105,14 @@ make kind-down
 
 Chart and design: [deploy/helm/README.md](deploy/helm/README.md).
 
+### GPU lab (Kaggle)
+
+```bash
+make lab-dry-run    # the whole notebook flow against the mock LLM, on the laptop
+# then run notebooks/fxassist_gpu_lab.ipynb on Kaggle (docs/KAGGLE_PLAYBOOK.md) and:
+make report RUN=results/raw/<date>/fxassist_results
+```
+
 API reference: [services/gateway/README.md](services/gateway/README.md). Metrics, dashboard, alerts and tracing: [observability/README.md](observability/README.md).
 
 Example:
@@ -124,7 +132,7 @@ Sources:
 Informational only, not financial advice.
 ```
 
-`make help` lists every target. Targets for later phases (`kind-up`, `kind-deploy`) say which phase builds them and exit with code 2.
+`make help` lists every target.
 
 ### Port conflicts
 
@@ -145,7 +153,7 @@ Services are published on `127.0.0.1` only, so they are not reachable from your 
 | default (`make up`) | everything: lite plus Ollama (the gateway uses it), Prometheus and Grafana. With an NVIDIA GPU the model sits in GPU memory; on CPU it needs about 3 GB more RAM | 4 GiB with a GPU, 7 GiB without |
 | kind (`make kind-deploy`) | the whole stack inside a local Kubernetes cluster (stop compose first) | 4 GiB; measured 2026-10-07: 2.1 GiB for the whole kind node, of which 803 MiB are our pods |
 
-These budgets are estimates and will be replaced with measurements in Phases 3 and 4. Measured (2026-10-06/07): gateway 349 MiB, Grafana 217 MiB, Qdrant 94 to 184 MiB, Prometheus 59 MiB, PostgreSQL 48 MiB, mock LLM 45 MiB, Redis 13 MiB; about 825 MiB for everything except Ollama, which uses 2.1 GiB with the 3B model.
+Measured (2026-10-06/07): gateway 349 MiB, Grafana 217 MiB, Qdrant 94 to 184 MiB, Prometheus 59 MiB, PostgreSQL 48 MiB, mock LLM 45 MiB, Redis 13 MiB; about 825 MiB for everything except Ollama, which uses 2.1 GiB with the 3B model.
 To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconfig`, then run `wsl --shutdown`.
 
 ## Project status
@@ -157,14 +165,18 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | 2 | FastAPI gateway, cache, rate limit, LLM adapter, mock LLM | Done |
 | 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Done (Langfuse export configured but not tried against a real account) |
 | 4 | Containers, Helm, kind, watchdog | Done |
-| 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Not started |
-| 6 | GPU session 1 (single T4) | Not started |
-| 7 | GPU session 2 (2x T4, tensor parallel) | Not started |
-| 8 | Final documentation and evidence | Not started |
+| 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Done (CI not yet run on GitHub: the repo has no GitHub remote) |
+| 6 | GPU session 1 (single T4) | Waiting for you to run the notebook |
+| 7 | GPU session 2 (2x T4, tensor parallel) | Built into the same notebook; waiting for a run |
+| 8 | Final documentation and evidence | Done (the GPU numbers in it are PENDING) |
 
 ## Results
 
-**PENDING.** Reported benchmark and evaluation numbers come only from the GPU lab (Phases 6 and 7), in [results/](results/). Local development runs with a 4-bit model are described in [LEARNING.md](LEARNING.md) and are not results.
+**PENDING.** Reported benchmark and evaluation numbers come only from the GPU lab (Phases 6 and 7), in [results/](results/): run the notebook, then `make report`. Local development runs with a 4-bit model are described in [LEARNING.md](LEARNING.md) and are not results.
+
+## What is tested
+
+[EDGE_CASES.md](EDGE_CASES.md) lists 102 failure scenarios; each one has a test, a recorded drill, or a stated reason why it is still open. About 360 offline tests run with `make test` (no Docker, no model, no network beyond localhost). Drills against real services: `make drill` (Redis, PostgreSQL, Qdrant stopped one by one), the hanging-model drill (`docs/runbooks/llm-timeout-storm.md`), `make kind-rollout-test`, `make kind-watchdog-drill`, `make kind-rbac-check`, and a PostgreSQL disk-full drill. Still open: rows that need the GPU runs (GPU-03, GPU-08), a fork pull request on GitHub (CI-02), and the fresh-clone check (ENV-05).
 
 ## Repository layout
 
@@ -177,8 +189,8 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | `deploy/compose` | Docker Compose for the local stack |
 | `deploy/helm` | Helm chart for kind (Phase 4) |
 | `observability/` | Prometheus config and Grafana dashboards (Phase 3) |
-| `bench/` | Benchmark harness (Phase 5) |
-| `notebooks/` | Kaggle GPU-lab notebooks (Phase 5) |
+| `bench/` | Benchmark harness, GPU-lab orchestration, report generator |
+| `notebooks/` | The Kaggle GPU-lab notebook and its builder |
 | `eval/` | Evaluation questions, injection attacks and planted-excerpt scenarios |
 | `data/` | `sources.yaml` corpus registry and generated `SOURCES.md`; raw documents are not committed |
 | `scripts/` | Helper scripts, including `bootstrap.sh` |
@@ -188,7 +200,18 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 
 ## Documentation
 
-- [LEARNING.md](LEARNING.md): what each phase taught, in plain language, with interview questions
-- [docs/VERSIONS.md](docs/VERSIONS.md): every pinned version and how it was verified
-- [docs/GLOSSARY.md](docs/GLOSSARY.md): plain-language definitions
-- [CHANGELOG.md](CHANGELOG.md)
+| Document | What it is for |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Design and decision log (ADR-001 to ADR-025) |
+| [EDGE_CASES.md](EDGE_CASES.md) | Every failure scenario, with its test or drill |
+| [LEARNING.md](LEARNING.md) | What each phase taught, in plain language, with interview questions |
+| [docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md) | 1- and 5-minute explanations, trade-offs per ADR, honest limits, follow-up questions |
+| [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | A 3-minute demo |
+| [docs/RESUME_BULLETS.md](docs/RESUME_BULLETS.md) | Resume bullets, numbers only from `results/` |
+| [docs/KAGGLE_PLAYBOOK.md](docs/KAGGLE_PLAYBOOK.md) | GPU lab: verified facts, hour budget, recovery, GPU memory formula |
+| [docs/BENCHMARK_METHOD.md](docs/BENCHMARK_METHOD.md) | How benchmark numbers are produced and read |
+| [docs/runbooks/](docs/runbooks/) | One runbook per failure drill |
+| [docs/VERSIONS.md](docs/VERSIONS.md) | Every pinned version and how it was verified |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | Plain-language definitions |
+| [data/SOURCES.md](data/SOURCES.md) | The 26 documents, their licences and whether they may be redistributed |
+| [CHANGELOG.md](CHANGELOG.md) | Changes per phase |

@@ -29,7 +29,10 @@ RUN /app/.venv/bin/python -c "from fastembed import TextEmbedding; \
 TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/data/cache/fastembed')"
 
 FROM python:3.11.17-slim-trixie
-RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app
+# The base image's pip, setuptools and wheel are not needed at runtime, and the scanner found
+# HIGH CVEs in their vendored copies (CVE-2026-23949, CVE-2026-24049; Trivy, 2026-10-07).
+RUN python -m pip uninstall -y -q setuptools wheel pip \
+    && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build --chown=10001:10001 /app /app
 # The corpus registry, for the ingestion Job on Kubernetes (`fxassist ingest`).
 COPY --chown=10001:10001 data/sources.yaml /app/data/sources.yaml

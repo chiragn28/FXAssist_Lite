@@ -36,6 +36,8 @@ fxassist-watchdog = { workspace = true }
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Generated from notebooks/build_notebook.py, whose cells are checked by bench/tests.
+extend-exclude = ["notebooks/*.ipynb"]
 
 [tool.ruff.lint]
 select = [
@@ -60,9 +62,11 @@ known-first-party = ["fxassist_agent", "fxassist_gateway", "fxassist_mock_llm", 
 "**/tests/**" = ["S101", "S603", "S607"]
 # Operator scripts call docker, kubectl and helm on purpose.
 "scripts/**" = ["S603", "S607"]
+# The GPU lab launches vLLM, pip and nvidia-smi on purpose.
+"bench/lab.py" = ["S603", "S607"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "services/agent/tests", "services/gateway/tests", "services/mock_llm/tests", "services/watchdog/tests"]
+testpaths = ["tests", "services/agent/tests", "services/gateway/tests", "services/mock_llm/tests", "services/watchdog/tests", "bench/tests"]
 addopts = "-ra --strict-markers"
 pythonpath = ["."]  # so tests can import bench/ and scripts/ helpers
 filterwarnings = [

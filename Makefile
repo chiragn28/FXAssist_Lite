@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 MAKEFLAGS += --no-print-directory
 
 # Raise this as phases are completed; `make bootstrap` then requires those tools.
-PHASE ?= 4
+PHASE ?= 5
 
 # Use .env when present, otherwise the committed defaults (ENV-04: ports come from here).
 ENV_FILE ?= $(if $(wildcard .env),.env,.env.example)
@@ -29,10 +29,11 @@ endef
 
 .PHONY: help bootstrap install lint fmt test secrets-scan check \
         up up-lite up-mock pull-model down down-volumes ps logs \
-        fetch ingest ask eval experiment sources-md \
+        fetch ingest ask eval eval-record experiment sources-md \
         serve mock-llm api-key drill load dashboard demo \
         images image-budget kind-up kind-load kind-deploy kind-down kind-key kind-status \
-        kind-rbac-check kind-watchdog-drill kind-rollout-test helm-check
+        kind-rbac-check kind-watchdog-drill kind-rollout-test helm-check \
+        notebook lab-dry-run report
 
 ##@ Setup
 help: ## Show this help
@@ -116,6 +117,9 @@ ask: ## Ask one question: make ask Q="What is a margin call?"
 
 eval: ## Run the evaluation set against the local model and print scores
 	$(FXA) eval
+
+eval-record: ## Store the latest eval run in PostgreSQL (or RUN=eval/runs/<ts>)
+	uv run fxassist-gateway record-eval $(or $(RUN),$$(ls -d eval/runs/2*/ | tail -1))
 
 experiment: ## Retrieval-only chunk size x top-k experiment (DAT-09)
 	$(FXA) experiment
@@ -222,6 +226,23 @@ helm-check: ## helm lint, and show how each environment differs from the base (K
 
 kind-down: ## Delete the kind cluster
 	kind delete cluster --name $(KIND_CLUSTER) --kubeconfig $(KUBECONFIG)
+
+##@ GPU lab (Phase 5)
+notebook: ## Regenerate notebooks/fxassist_gpu_lab.ipynb from its builder
+	uv run python notebooks/build_notebook.py
+
+lab-dry-run: ## Run the whole GPU-lab flow against the mock LLM (no GPU), then a report
+	uv run python -c "from bench import lab, matrix; \
+	cfg = lab.LabConfig.for_mode('mock'); lab.check_environment(cfg); smoke = lab.smoke_test(cfg); \
+	lab.run_experiments(cfg, matrix.scaled_down(matrix.EXPERIMENTS), smoke); lab.oom_drill(cfg); \
+	print(lab.package(cfg))"
+	@latest=$$(ls -td results/mock/*/ | head -1) && \
+	uv run python -m bench.report "$$latest" --out "$$latest/BENCHMARKS.md" && \
+	echo "mock report: $$latest/BENCHMARKS.md (a dry run, not results)"
+
+report: ## Build results/BENCHMARKS.md from a downloaded GPU-lab run: make report RUN=results/raw/<date>/fxassist_results
+	@test -n "$(RUN)" || { echo 'usage: make report RUN=results/raw/<date>/fxassist_results' >&2; exit 2; }
+	uv run python -m bench.report "$(RUN)"
 
 ##@ Demo
 demo: LLM ?= mock

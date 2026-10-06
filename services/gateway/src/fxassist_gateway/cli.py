@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from types import FrameType
 
 import uvicorn
@@ -91,6 +92,23 @@ def revoke_key(settings: GatewaySettings, key_id: str) -> int:
     return 0 if ok else 1
 
 
+def record_eval(settings: GatewaySettings, run_dir: Path) -> int:
+    """Store the summary of an `fxassist eval` run in PostgreSQL (ADR-011)."""
+    import json
+
+    from .db import add_eval_run, eval_summary
+
+    items = json.loads((run_dir / "items.json").read_text())
+    first_line = (
+        (run_dir / "summary.txt").read_text().splitlines()[0]
+    )  # "Model: <name> at <url> ..."
+    model = first_line.removeprefix("Model: ").split(" at ")[0].strip() or "unknown"
+    summary = eval_summary(items) | {"run": run_dir.name, "header": first_line}
+    asyncio.run(_with_store(settings, lambda store: add_eval_run(store, model, summary)))
+    print(f"recorded {run_dir.name}: {summary['passed']}/{summary['items']} items passed ({model})")
+    return 0
+
+
 def list_keys(settings: GatewaySettings) -> int:
     rows = asyncio.run(_with_store(settings, lambda store: store.list_keys()))
     for key_id, name, created, revoked in rows:
@@ -108,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("revoke-key", help="revoke an API key by its id")
     p.add_argument("key_id")
     sub.add_parser("list-keys", help="list API keys (ids and names only)")
+    p = sub.add_parser("record-eval", help="store an eval run's summary in PostgreSQL")
+    p.add_argument("run_dir", type=Path)
     args = parser.parse_args(argv)
     settings = GatewaySettings()
     try:
@@ -118,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
             return create_key(settings, args.name)
         if args.command == "revoke-key":
             return revoke_key(settings, args.key_id)
+        if args.command == "record-eval":
+            return record_eval(settings, args.run_dir)
         return list_keys(settings)
     except Exception as exc:  # psycopg errors: say what to do, not a stack trace
         if type(exc).__module__.startswith(("psycopg", "psycopg_pool")):
