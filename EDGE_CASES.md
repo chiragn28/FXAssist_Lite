@@ -168,7 +168,7 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
 | ENV-01 | Windows line endings break shell scripts | `.gitattributes` forces LF for scripts | fresh-clone test | DONE (test_env01_gitattributes_forces_lf, test_env01_no_crlf_in_tracked_text_files; bootstrap also checks the checkout) |
-| ENV-02 | Docker Desktop memory too low for the full stack | Documented minimum; a "lite" compose profile for lower-RAM machines | check | TODO: partial. Done: bootstrap memory check, minimums in README, test_env02_memory_limit_set, test_env02_lite_profile_fits_budget. Left: the `full` profile has nothing in it until Phase 3 |
+| ENV-02 | Docker Desktop memory too low for the full stack | Documented minimum; a "lite" compose profile for lower-RAM machines | check | TODO: partial. Done: bootstrap memory check (test_env02_docker_memory_tiers), minimums in README, test_env02_memory_limit_set, test_env02_lite_profile_fits_budget. Left: the `full` profile has nothing in it until Phase 3 |
 | ENV-03 | Ollama not running or model not pulled | Clear startup error with the exact fix command | test | TODO |
 | ENV-04 | Port conflicts on the host | Ports configurable by environment variables | test | DONE (test_env04_ports_come_from_env, test_env04_every_variable_is_documented; manual 2026-10-06: host Postgres held 5432, FXA_POSTGRES_PORT=55432 worked) |
 | ENV-05 | Fresh clone doesn't work | `make bootstrap` followed by `make demo` works on a clean machine; verified in CI where possible | clean clone test | TODO: partial. Done: `make bootstrap` (tests/test_bootstrap.py, CI step on a clean runner). Left: `make demo` (Phase 2 onwards, fresh-clone test in Phase 8) |

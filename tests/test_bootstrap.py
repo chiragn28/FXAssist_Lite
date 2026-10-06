@@ -14,8 +14,12 @@ BASH = shutil.which("bash")
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash not available")
 
 
-def run(*args: str, hide: str = "") -> subprocess.CompletedProcess[str]:
+def run(
+    *args: str, hide: str = "", mem_bytes: int | None = None
+) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "FXA_BOOTSTRAP_HIDE": hide}
+    if mem_bytes is not None:
+        env["FXA_BOOTSTRAP_DOCKER_MEM_BYTES"] = str(mem_bytes)
     return subprocess.run(
         [BASH, str(SCRIPT), *args],
         cwd=ROOT,
@@ -54,3 +58,21 @@ def test_later_phase_tools_warn_until_that_phase() -> None:
     assert "[WARN] kind (local Kubernetes) (needed from Phase 4)" in early.stdout
     assert "[MISS] kind (local Kubernetes)" in late.stdout
     assert late.returncode == 1
+
+
+GIB = 1024**3
+
+
+@pytest.mark.parametrize(
+    ("mem_bytes", "expected"),
+    [
+        # Default WSL2 on a 16 GB laptop: about 8 GB configured, reported as 7.7 GiB.
+        (8_235_708_416, "[ OK ] Docker memory 7.7 GiB (full stack and kind)"),
+        (6 * GIB, "[WARN] Docker memory 6.0 GiB: enough for the full compose stack"),
+        (int(3.8 * GIB), "[WARN] Docker memory 3.8 GiB: use the lite profile"),
+        (3 * GIB, "[MISS] Docker memory 3.0 GiB is below the 4 GB minimum"),
+    ],
+)
+def test_env02_docker_memory_tiers(mem_bytes: int, expected: str) -> None:
+    """ENV-02: the VM reports slightly less than its configured size; tiers must allow for it."""
+    assert expected in run(mem_bytes=mem_bytes).stdout

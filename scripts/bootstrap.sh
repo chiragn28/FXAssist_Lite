@@ -8,8 +8,9 @@
 #
 # Exit code: 0 if every required check passed, 1 otherwise.
 #
-# Test hook: FXA_BOOTSTRAP_HIDE="docker,uv" makes those commands look missing, so the
-# "tells me exactly what is missing" behaviour can be tested (tests/test_bootstrap.py).
+# Test hooks (tests/test_bootstrap.py):
+#   FXA_BOOTSTRAP_HIDE="docker,uv"   makes those commands look missing
+#   FXA_BOOTSTRAP_DOCKER_MEM_BYTES=n pretends Docker reports n bytes of memory
 
 set -uo pipefail
 
@@ -17,7 +18,7 @@ PHASE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --phase) PHASE="${2:?--phase needs a number}"; shift 2 ;;
-        -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown argument: $1 (try --help)" >&2; exit 2 ;;
     esac
 done
@@ -51,6 +52,25 @@ version_ge() {
 }
 
 section() { printf '\n%s\n' "$1"; }
+
+# ENV-02: classify the memory Docker can use. The VM reports a little less than its
+# configured size (an 8 GB WSL2 setting shows as about 7.7 GiB), so each tier accepts
+# 90% of its nominal size. Budgets are estimates until measured in Phases 3 and 4.
+check_docker_memory() { # check_docker_memory <bytes>
+    local mem_mib=$(( $1 / 1024 / 1024 ))
+    local shown fix
+    shown="$(awk -v m="$mem_mib" 'BEGIN { printf "%.1f GiB", m / 1024 }')"
+    fix="raise memory in %UserProfile%\\.wslconfig ([wsl2] memory=8GB), then: wsl --shutdown"
+    if (( mem_mib >= 8 * 1024 * 9 / 10 )); then
+        ok "Docker memory $shown (full stack and kind)"
+    elif (( mem_mib >= 6 * 1024 * 9 / 10 )); then
+        warn "Docker memory $shown: enough for the full compose stack, tight for kind (8 GB)" "$fix"
+    elif (( mem_mib >= 4 * 1024 * 9 / 10 )); then
+        warn "Docker memory $shown: use the lite profile (make up), not make up-full" "$fix"
+    else
+        miss "Docker memory $shown is below the 4 GB minimum" "$fix"
+    fi
+}
 
 printf 'FXAssist Lite bootstrap check (required up to Phase %s)\n' "$PHASE"
 
@@ -129,25 +149,13 @@ fi
 
 # --- Docker ---------------------------------------------------------------------
 section "Docker"
-if has docker; then
+if [[ -n "${FXA_BOOTSTRAP_DOCKER_MEM_BYTES:-}" ]]; then
+    check_docker_memory "$FXA_BOOTSTRAP_DOCKER_MEM_BYTES"
+elif has docker; then
     ok "docker CLI"
     if docker info >/dev/null 2>&1; then
         ok "docker daemon reachable"
-        mem_bytes="$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo 0)"
-        mem_gib=$(( mem_bytes / 1024 / 1024 / 1024 ))
-        # ENV-02: budgets are estimates until measured in Phases 3 and 4 (see README).
-        if (( mem_gib >= 8 )); then
-            ok "Docker memory ${mem_gib} GiB (full stack and kind)"
-        elif (( mem_gib >= 6 )); then
-            warn "Docker memory ${mem_gib} GiB: enough for the full compose stack, tight for kind (8 GiB)" \
-                 "raise memory in %UserProfile%\\.wslconfig ([wsl2] memory=8GB), then: wsl --shutdown"
-        elif (( mem_gib >= 4 )); then
-            warn "Docker memory ${mem_gib} GiB: use the lite profile (make up), not COMPOSE_PROFILES=full" \
-                 "raise memory in %UserProfile%\\.wslconfig ([wsl2] memory=8GB), then: wsl --shutdown"
-        else
-            miss "Docker memory ${mem_gib} GiB is below the 4 GiB minimum" \
-                 "raise memory in %UserProfile%\\.wslconfig ([wsl2] memory=8GB), then: wsl --shutdown"
-        fi
+        check_docker_memory "$(docker info --format '{{.MemTotal}}' 2>/dev/null || echo 0)"
     else
         miss "docker daemon not reachable" \
              "start Docker Desktop; in WSL2 also enable Settings > Resources > WSL integration for your distro"
@@ -195,10 +203,12 @@ if has helm;    then ok "helm";    else need 4 "helm" "see https://helm.sh/docs/
 
 # --- Repo setup -----------------------------------------------------------------
 section "Repo setup"
+NEXT_STEP="make up"
 if [[ -f "$REPO_ROOT/.git/hooks/pre-commit" ]]; then
     ok "pre-commit hooks installed (secret scan on commit, SAF-07)"
 else
     warn "pre-commit hooks not installed" "make install"
+    NEXT_STEP="make install"
 fi
 if [[ -f "$REPO_ROOT/.env" ]]; then
     ok ".env present"
@@ -210,7 +220,7 @@ fi
 printf '\n'
 if (( MISSING == 0 )); then
     printf 'Ready for Phase %s: %d warning(s), nothing required is missing.\n' "$PHASE" "$WARNINGS"
-    printf 'Next: make install\n'
+    printf 'Next: %s\n' "$NEXT_STEP"
     exit 0
 fi
 printf 'Not ready: %d required item(s) missing, %d warning(s). Apply the fixes above and re-run make bootstrap.\n' \

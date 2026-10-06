@@ -2,6 +2,12 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Unreleased
+
+### Fixed
+- `make bootstrap` rounded Docker memory down to whole GiB, so a default 8 GB WSL2 VM (reported as 7.7 GiB) was flagged as too small for kind. Tiers now accept 90% of their nominal size and show one decimal (ENV-02).
+- `make bootstrap` suggested `make install` even when it had already been run.
+
 ## Phase 0: Scaffold (2026-10-06)
 
 ### Added
