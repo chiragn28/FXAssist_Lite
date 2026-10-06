@@ -12,7 +12,7 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 |---|---|---|---|---|
 | DAT-01 | PDF has no extractable text (scanned) | Skip with a logged warning and an entry in an ingestion report; never embed empty chunks | fixture scanned PDF | DONE (test_dat01_scanned_pdf_is_skipped_with_warning) |
 | DAT-02 | Same document ingested twice | Idempotent: no duplicate chunks (stable chunk IDs from content hash) | run `make ingest` twice, compare counts | DONE (test_dat02_ingesting_twice_adds_no_duplicates, test_dat02_chunk_ids_are_stable_and_source_specific; real corpus: 2 runs, same 731 chunks and corpus version, 0 re-embedded) |
-| DAT-03 | Document updated after ingestion | Corpus version changes, old chunks removed, cache invalidated automatically | change a file, re-ingest, check version | DONE (test_dat03_updated_document_replaces_old_chunks_and_changes_version; real corpus: 84 stale chunks replaced, version changed). Corpus version is on the collection; the cache that uses it arrives in Phase 2 (CAC-02) |
+| DAT-03 | Document updated after ingestion | Corpus version changes, old chunks removed, cache invalidated automatically | change a file, re-ingest, check version | DONE (test_dat03_updated_document_replaces_old_chunks_and_changes_version; real corpus: 84 stale chunks replaced, version changed). The gateway cache key includes the corpus version, so re-ingesting changes every key (test_cac02_reingest_means_no_stale_answer) |
 | DAT-04 | Very large document | Ingested in streaming batches without exhausting memory; chunk count capped with a warning | synthetic 500-page fixture | DONE (test_dat04_large_document_streams_and_is_capped, test_dat04_embedding_happens_in_bounded_batches) |
 | DAT-05 | Tables, headers, footers, page numbers pollute text | Boilerplate stripped or tolerated; retrieval eval does not regress | manual sample plus eval | DONE (test_dat05_repeated_headers_footers_and_page_numbers_are_removed, test_dat05_html_keeps_main_content_only; real FCA/ASIC headers checked). Limitation: header matching ignores digits |
 | DAT-06 | Non-English or mixed-language text | Detected and either skipped or flagged; never silently mis-embedded | fixture | DONE (test_dat06_language_check, test_dat06_non_english_document_is_flagged_not_embedded). Note: the check also drops non-prose (respondent lists, formulas): 4 of 731 real chunks |
@@ -40,48 +40,48 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| LLM-01 | LLM endpoint times out | Request fails with a clear 504 after a bounded timeout, metric incremented, no hanging connection | mock with delay | TODO |
-| LLM-02 | Stream breaks halfway | Client receives an explicit error event; partial answers are never cached | mock disconnect | TODO |
-| LLM-03 | LLM returns an empty answer | Treated as failure, one bounded retry, then a clear error | mock empty | TODO |
-| LLM-04 | LLM returns HTTP 429 or 503 | Bounded retries with backoff and jitter; circuit breaker opens after repeated failure | mock error codes | TODO |
-| LLM-05 | Client disconnects mid-stream | Upstream generation cancelled; no leaked tasks or connections | disconnect test, check open connections | TODO |
-| LLM-06 | Prompt plus requested output exceeds max model length | Rejected or trimmed before sending, with a precise message | long-prompt test | TODO |
-| LLM-07 | Different servers give different token streams (format quirks) | Adapter normalises chunk format; tests run against mock and Ollama | contract test | TODO |
+| LLM-01 | LLM endpoint times out | Request fails with a clear 504 after a bounded timeout, metric incremented, no hanging connection | mock with delay | DONE (test_llm01_server_that_never_answers_times_out_and_lets_go, test_llm01_stream_slower_than_the_total_budget_times_out, test_llm01_model_timeout_is_a_clear_504_and_counted). Bounds: 30 s silence, 60 s total per call |
+| LLM-02 | Stream breaks halfway | Client receives an explicit error event; partial answers are never cached | mock disconnect | DONE (test_llm02_stream_broken_after_content_is_an_error_not_a_short_answer, test_llm02_stream_ending_without_finish_is_an_error, test_llm02_broken_stream_is_an_error_event_and_never_cached) |
+| LLM-03 | LLM returns an empty answer | Treated as failure, one bounded retry, then a clear error | mock empty | DONE (test_llm03_empty_answer_is_retried_once_then_fails, test_llm03_empty_then_good_answer_succeeds, test_llm03_empty_answers_give_a_clear_error) |
+| LLM-04 | LLM returns HTTP 429 or 503 | Bounded retries with backoff and jitter; circuit breaker opens after repeated failure | mock error codes | DONE (test_llm04_transient_503s_are_retried_with_backoff, test_llm04_retries_are_bounded, test_llm04_backoff_has_full_jitter_and_honours_retry_after, test_llm04_circuit_opens_and_fails_fast, test_llm04_half_open_lets_one_trial_through_and_closes_on_success, test_llm04_overloaded_model_gives_503_then_the_circuit_opens) |
+| LLM-05 | Client disconnects mid-stream | Upstream generation cancelled; no leaked tasks or connections | disconnect test, check open connections | DONE (test_llm05_cancel_stops_the_stream_and_closes_the_connection, test_llm05_client_disconnect_cancels_the_generation, test_llm05_cancelled_run_stops_before_the_next_node). Limit: a cancel is noticed at the next streamed chunk, so a model still reading a long prompt finishes that first |
+| LLM-06 | Prompt plus requested output exceeds max model length | Rejected or trimmed before sending, with a precise message | long-prompt test | DONE (test_llm06_oversized_prompt_is_rejected_before_sending, test_llm06_prompt_that_fits_is_sent; the agent already trims context, RET-06). Token count is an estimate (3 chars per token, conservative) |
+| LLM-07 | Different servers give different token streams (format quirks) | Adapter normalises chunk format; tests run against mock and Ollama | contract test | DONE (test_llm07_every_streaming_flavour_gives_the_same_text, test_llm07_sse_parsing_tolerates_quirks, test_llm07_non_streaming_json_body_is_accepted, test_llm07_contract_with_real_ollama, test_llm07_quirky_server_format_still_answers_end_to_end) |
 | LLM-08 | Model refuses or adds disclaimers | Passed through unchanged; not treated as an error | fixture | DONE (test_llm08_model_disclaimers_pass_through_unchanged, test_llm08_trailing_disclaimer_without_numbers_is_kept) |
-| LLM-09 | Mock server is too perfect | Mock supports configurable latency, errors, slow-first-token and malformed chunks | mock feature test | TODO |
+| LLM-09 | Mock server is too perfect | Mock supports configurable latency, errors, slow-first-token and malformed chunks | mock feature test | DONE (services/mock_llm/tests/test_mock_llm.py: latency, slow first token, 429/503 with Retry-After, empty, malformed chunks, mid-stream disconnect, hang, 4 streaming flavours; test_llm09_malformed_chunks_are_skipped_and_counted) |
 
 ## API: Gateway behaviour
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| API-01 | Missing, malformed or wrong API key | 401 with no detail leaked; constant-time comparison on hashes | unit tests | TODO |
-| API-02 | Rate limit exceeded | 429 with `Retry-After` | burst test | TODO |
-| API-03 | Empty, huge or non-UTF-8 question | 422 for invalid, hard size cap for huge | fuzz test | TODO |
-| API-04 | Concurrent identical requests (stampede) | One computation, others wait or are served from cache (request coalescing) | concurrency test | TODO |
-| API-05 | Streaming through proxies buffers output | SSE headers set to disable buffering; documented | manual check | TODO |
-| API-06 | Request ID missing | Generated, returned in the response, attached to logs and traces | test | TODO |
-| API-07 | Slow client (backpressure) | Server doesn't buffer unlimited data; stream cancelled after a timeout | slow-reader test | TODO |
-| API-08 | Graceful shutdown during in-flight requests | In-flight requests finish within a grace period; new ones rejected | SIGTERM test | TODO |
+| API-01 | Missing, malformed or wrong API key | 401 with no detail leaked; constant-time comparison on hashes | unit tests | DONE (test_api01_bad_keys_get_the_same_401, test_api01_right_id_wrong_secret_is_rejected_in_constant_time, test_api01_only_a_hash_is_stored_and_revocation_takes_effect, test_api01_info_endpoint_also_needs_a_key). ADR-025 |
+| API-02 | Rate limit exceeded | 429 with `Retry-After` | burst test | DONE (test_api02_burst_over_the_limit_gets_429_with_retry_after, test_api02_limits_are_per_key) |
+| API-03 | Empty, huge or non-UTF-8 question | 422 for invalid, hard size cap for huge | fuzz test | DONE (test_api03_invalid_bodies_get_422, test_api03_question_over_the_limit_gets_a_precise_422, test_api03_huge_body_hits_the_hard_cap, test_api03_random_bytes_never_cause_a_500) |
+| API-04 | Concurrent identical requests (stampede) | One computation, others wait or are served from cache (request coalescing) | concurrency test | DONE (test_api04_identical_concurrent_requests_share_one_computation: 5 requests, 1 generation). Coalescing is per gateway process; across replicas the cache catches repeats |
+| API-05 | Streaming through proxies buffers output | SSE headers set to disable buffering; documented | manual check | DONE (test_api05_sse_headers_disable_proxy_buffering_and_keepalives_flow; headers and keep-alives documented in sse.py and ADR-024). A real proxy (ingress-nginx) is checked in Phase 4 |
+| API-06 | Request ID missing | Generated, returned in the response, attached to logs and traces | test | DONE (test_api06_request_id_is_generated_returned_and_logged, test_api06_valid_incoming_id_is_kept_and_unsafe_one_replaced, test_api06_request_id_is_in_the_sse_meta_event). Traces arrive in Phase 3 |
+| API-07 | Slow client (backpressure) | Server doesn't buffer unlimited data; stream cancelled after a timeout | slow-reader test | DONE (test_api07_client_that_stops_reading_is_cut_off: 15 s write timeout, then the run is released) |
+| API-08 | Graceful shutdown during in-flight requests | In-flight requests finish within a grace period; new ones rejected | SIGTERM test | DONE (test_api08_in_flight_requests_finish_and_new_ones_are_refused; manual 2026-10-06: `docker compose stop gateway` during an 8 s request, the request finished with 200, exit code 0) |
 
 ## CAC: Cache and rate limiter
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| CAC-01 | Redis is down | Cache skipped (fail open); rate limit uses a conservative in-memory fallback; `/readyz` reports degraded, not failed | stop Redis | TODO |
-| CAC-02 | Corpus, prompt or model version changes | Cache key changes, so stale answers are never served | version bump test | TODO |
-| CAC-03 | Error or abstention answers | Errors never cached; abstentions cached only with a short TTL | test | TODO |
-| CAC-04 | Cache poisoning via crafted question | Key includes normalised question only; no user-controlled key parts beyond the hash | review plus test | TODO |
-| CAC-05 | Cache on during benchmarks | Benchmark harness refuses to run with the cache enabled | guard test | TODO |
-| CAC-06 | Clock skew or Redis restart resets counters | Documented; limiter errs on allowing slightly more, not locking everyone out | note | TODO |
+| CAC-01 | Redis is down | Cache skipped (fail open); rate limit uses a conservative in-memory fallback; `/readyz` reports degraded, not failed | stop Redis | DONE (test_cac01_redis_down_fails_open_and_reports_degraded, test_cac01_rate_limit_falls_back_to_a_stricter_local_limit, test_cac01_redis_recovers_without_a_restart; `make drill` against real Redis) |
+| CAC-02 | Corpus, prompt or model version changes | Cache key changes, so stale answers are never served | version bump test | DONE (test_cac02_key_changes_with_corpus_prompt_and_model, test_cac02_reingest_means_no_stale_answer, test_cac02_prompt_version_tracks_the_prompt_text) |
+| CAC-03 | Error or abstention answers | Errors never cached; abstentions cached only with a short TTL | test | DONE (test_cac03_ttl_policy, test_cac03_errors_are_never_cached, test_cac03_abstentions_get_the_short_ttl) |
+| CAC-04 | Cache poisoning via crafted question | Key includes normalised question only; no user-controlled key parts beyond the hash | review plus test | DONE (test_cac04_crafted_questions_cannot_shape_the_key, test_cac04_normalisation_is_meaning_preserving_only; review: only the question, hashed, is user input) |
+| CAC-05 | Cache on during benchmarks | Benchmark harness refuses to run with the cache enabled | guard test | DONE (test_cac05_benchmark_guard_refuses_a_cached_gateway; `bench/guard.py`, used by every load script from Phase 3) |
+| CAC-06 | Clock skew or Redis restart resets counters | Documented; limiter errs on allowing slightly more, not locking everyone out | note | DONE (test_cac06_limiter_uses_redis_time_not_the_gateway_clock, test_cac06_redis_restart_refills_buckets_rather_than_locking_out; documented in redis_state.py and LEARNING.md) |
 
 ## DEP: Dependency failures
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| DEP-01 | Qdrant is down | `/readyz` fails; requests get 503 with a clear message; no hallucinated answers | stop Qdrant | TODO |
-| DEP-02 | PostgreSQL is down | Requests still succeed; logs buffered (bounded) or dropped with a metric | stop Postgres | TODO |
+| DEP-01 | Qdrant is down | `/readyz` fails; requests get 503 with a clear message; no hallucinated answers | stop Qdrant | DONE (test_dep01_qdrant_down_gives_503_and_never_calls_the_model, test_dep01_qdrant_failing_mid_request_is_also_503, test_dep01_missing_collection_says_to_ingest, test_dep01_recovery_needs_no_restart; `make drill` against real Qdrant) |
+| DEP-02 | PostgreSQL is down | Requests still succeed; logs buffered (bounded) or dropped with a metric | stop Postgres | DONE (test_dep02_postgres_down_requests_still_succeed_and_logs_are_buffered, test_dep02_buffer_is_bounded_and_drops_are_counted; `make drill`: the request made during the outage was in the log after recovery) |
 | DEP-03 | Langfuse unreachable or rate-limited | Requests unaffected; tracing exporter times out quickly and drops | block network to Langfuse | TODO |
-| DEP-04 | Services start in the wrong order | Retries with backoff; readiness gates traffic; no crash loops | `docker compose up` cold start | TODO |
+| DEP-04 | Services start in the wrong order | Retries with backoff; readiness gates traffic; no crash loops | `docker compose up` cold start | DONE (test_dep04_starts_with_every_dependency_down_then_becomes_ready; manual 2026-10-06: `make down && make up-lite`, no depends_on, gateway ready in 9 s with 0 restarts). Kubernetes probes in Phase 4 |
 | DEP-05 | Disk full on a volume | Clear error, alert metric, no corrupted data | note and manual test | TODO |
 | DEP-06 | Hugging Face download fails in notebook | Retry, resume partial downloads, fail with an actionable message | simulate offline | TODO |
 
@@ -159,9 +159,9 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | SAF-03 | Answer states a number (leverage limit, fee) not in the sources | Numbers must be supported by a cited chunk; otherwise abstain | eval check | DONE (test_saf03_invented_number_is_rejected, test_saf03_list_numbering_is_not_treated_as_a_claimed_number; eval scenario c03). Limitation: a number that exists in the cited excerpt but is attributed wrongly (eval a02: 20:1 for majors) passes |
 | SAF-04 | Prompt injection in user input | System instructions hold; test set of 10 attacks | adversarial set | DONE (eval/attacks.yaml 10/10 in the final local run; test_guards_flag_unsafe_or_vague_questions, test_saf04_citation_after_full_stop_does_not_cover_the_next_sentence) |
 | SAF-05 | Request to reveal system prompt or keys | Refused | fixture | DONE (test_saf04_saf05_refusals_never_reach_the_model; eval r01-r02) |
-| SAF-06 | Every answer must be framed as informational | Standard disclaimer added by the gateway, not by the model | test | TODO |
+| SAF-06 | Every answer must be framed as informational | Standard disclaimer added by the gateway, not by the model | test | DONE (test_saf06_disclaimer_is_on_every_kind_of_answer, test_json_answer_has_citations_and_the_gateway_disclaimer) |
 | SAF-07 | Secrets committed to git | Pre-commit secret scan and CI scan | scan job | DONE (pre-commit gitleaks: test_saf07_precommit_runs_gitleaks; CI full-history scan: test_saf07_ci_scans_full_history; manual: planted token caught). First real CI run pending a push to GitHub |
-| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | TODO: partial. Done: compose services, including Ollama via its wrapper Dockerfile, run non-root with all capabilities dropped (test_saf08_runs_as_non_root, test_saf08_ollama_dockerfile_drops_root). Left: our own images (Phase 4), vulnerability scan (Phase 5) |
+| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | TODO: partial. Done: compose services and our own gateway and mock LLM images run non-root with all capabilities dropped (test_saf08_runs_as_non_root, test_saf08_ollama_dockerfile_drops_root, test_saf08_own_images_switch_to_a_non_root_user). Left: vulnerability scan (Phase 5) |
 
 ## ENV: Developer environment
 
@@ -171,4 +171,4 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | ENV-02 | Docker Desktop memory too low for the full stack | Documented minimum; a "lite" compose profile for lower-RAM machines | check | TODO: partial. Done: bootstrap memory check (test_env02_docker_memory_tiers), minimums in README, test_env02_memory_limit_set, test_env02_lite_profile_fits_budget. Left: the `full` profile has nothing in it until Phase 3 |
 | ENV-03 | Ollama not running or model not pulled | Clear startup error with the exact fix command | test | DONE (test_env03_model_not_pulled_gives_the_exact_fix, test_env03_server_down_gives_the_exact_fix; bootstrap 'Local model' section) |
 | ENV-04 | Port conflicts on the host | Ports configurable by environment variables | test | DONE (test_env04_ports_come_from_env, test_env04_every_variable_is_documented; manual 2026-10-06: host Postgres held 5432, FXA_POSTGRES_PORT=55432 worked) |
-| ENV-05 | Fresh clone doesn't work | `make bootstrap` followed by `make demo` works on a clean machine; verified in CI where possible | clean clone test | TODO: partial. Done: `make bootstrap` (tests/test_bootstrap.py, CI step on a clean runner). Left: `make demo` (Phase 2 onwards, fresh-clone test in Phase 8) |
+| ENV-05 | Fresh clone doesn't work | `make bootstrap` followed by `make demo` works on a clean machine; verified in CI where possible | clean clone test | TODO: partial. Done: `make bootstrap` (tests/test_bootstrap.py, CI step on a clean runner). `make demo` works (Phase 2, run 2026-10-06 with LLM=ollama). Left: fresh-clone test in Phase 8 |

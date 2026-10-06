@@ -204,6 +204,22 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 - **Decision:** (b) fastembed with `BAAI/bge-small-en-v1.5` (384 dimensions, cosine).
 - **Consequences:** much smaller images and faster cold start. ONNX output can differ from PyTorch in the last decimals, so vectors must never be mixed across runtimes: the collection records the model name, runtime and dimension, and the agent refuses to start on a mismatch (DAT-10).
 
+### ADR-024: The stream carries progress, then the validated answer; not raw tokens
+- **Status:** proposed in Phase 2 (2026-10-06), implemented, awaiting approval. New decision: the build contract asks for SSE streaming, and no earlier ADR says what is streamed.
+- **Plain meaning:** while the agent works, the client sees each step as it happens ("searching", "grading", "writing", "checking"). The answer text is sent once it has passed the citation and number checks, never word by word before that.
+- **Context:** the validator (RET-03, RET-08, SAF-03) needs the whole answer: it removes sentences after the last citation, removes citations of excerpts that were not retrieved, and rejects answers with numbers not in the cited text. Text streamed before validation could show a user exactly what the validator later removes, such as an injected sentence or an invented leverage limit.
+- **Options:** (a) stream raw tokens, then send a "final" event that replaces them; (b) validate sentence by sentence while streaming; (c) stream progress events, then the validated answer.
+- **Decision:** (c). Events: `meta`, `status` (one per graph node), `answer` (validated text, citations, disclaimer), `done`, or `error`. Keep-alive comments every 10 s.
+- **Consequences:** the user waits for the full generation before reading (about 1 to 2 s with the local 3B model), but sees progress immediately. Time to first token is still measured, inside the LLM adapter, so the metric is honest about the model (OBS-05). An error mid-generation becomes an `error` event (LLM-02). Option (a) can be added later behind a request flag if a use case accepts unvalidated drafts.
+
+### ADR-025: API keys are checked against an in-memory snapshot of the key table
+- **Status:** proposed in Phase 2 (2026-10-06), implemented, awaiting approval. Refines ADR-011 (keys live in PostgreSQL); the storage is unchanged.
+- **Plain meaning:** the gateway copies the key table into memory every 30 seconds and checks keys there, so the database is not on the path of every request.
+- **Context:** DEP-02 requires requests to keep working while PostgreSQL is down, but API-01 requires every request to be authenticated. Reading the key table per request would make PostgreSQL a hard dependency.
+- **Options:** (a) query PostgreSQL per request; (b) per-key cache filled on first use; (c) full snapshot refreshed on a timer.
+- **Decision:** (c). Keys are `fxa_<id>_<secret>`; only the id and a SHA-256 of the whole key are stored. A fast hash is enough because keys are 256-bit random values (slow hashes protect guessable human passwords). Comparison uses `hmac.compare_digest`, and unknown ids are compared against a dummy hash, so response timing does not reveal which ids exist.
+- **Consequences:** a new or revoked key takes effect within one refresh interval (`FXA_KEY_REFRESH_S`, 30 s). The gateway cannot authenticate anyone until its first successful load, so it reports not-ready until then (DEP-04). The table is expected to stay small (hundreds of keys, not millions).
+
 ---
 
 ## 4. Cost model

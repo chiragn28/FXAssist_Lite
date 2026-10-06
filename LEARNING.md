@@ -112,3 +112,57 @@ Cautions, in order of importance:
    First check whether retrieval found the right text (retrieval hit rate, fact hit rate). If it did, the model misread it, so generation is the problem. Add output checks: citations must point to retrieved excerpts, numbers must appear in the cited excerpt, and uncited claims are removed. Be honest that this catches invented numbers but not a real number attributed to the wrong thing; for that you need a stronger model or a per-claim check.
 3. *How do you defend a RAG system against prompt injection?*
    In layers: rule-based checks on the input, a prompt that treats retrieved text and the question as data inside delimiters the data cannot close, and checks in code on the output (validated citations, numbers backed by sources, nothing after the last citation). Test it with a fixed attack set that includes attacks designed to get past the first layer, and measure the result.
+
+---
+
+## Phase 2: API service
+
+### Concepts and decisions
+
+- **A gateway is a chain of cheap checks in front of one expensive call.** Every request passes request ID, API key, body checks, rate limit, cache and coalescing before the model is touched. Each step is ordered by cost: rejecting a bad key costs microseconds, a model call costs seconds. A request that will fail should fail at the cheapest possible step, with a clear status code (401, 413, 422, 429, 503, 504).
+
+- **Every dependency needs a written failure policy, decided before it fails.** Redis down: the cache is skipped (fail open) but the rate limiter falls back to a stricter in-memory limit (never "no limit"). PostgreSQL down: keys come from a memory snapshot and logs wait in a bounded buffer. Qdrant down: 503, because answering without documents would be making things up. `make drill` stops each one for real and checks the behaviour; all three recovered in under 5 s without a restart.
+
+- **Timeouts, retries and circuit breakers work as a set.** A timeout bounds how long one call can hang (LLM-01). Retries hide short blips, but only for errors that are safe to repeat (connection refused, 429, 503), with *exponential backoff and full jitter* so that many clients do not retry in lockstep (LLM-04). A *circuit breaker* stops calling a server that keeps failing, so an overloaded model gets room to recover and users get a fast 503 instead of a slow one. Retrying a timeout or a half-finished stream is deliberately not done: it doubles load at the worst moment.
+
+- **Streaming is about the connection, not only the tokens.** The adapter always streams from the model, even though the user sees the answer only after validation (ADR-024). Streaming gives: time to first token, the ability to stop generation when the user leaves (closing the connection makes the model server stop), and a way to tell "the stream broke" from "the model finished" (a stream that ends without `[DONE]` or `finish_reason` is an error, not a short answer).
+
+- **Sync code inside an async server needs a bridge.** The agent is synchronous (LangGraph `invoke`), FastAPI is async. The agent runs in a fixed-size thread pool, behind a semaphore with a timeout: that is a bounded queue, and "busy" becomes a fast 503 instead of an unbounded pile-up. A thread cannot be killed from outside, so cancellation is cooperative: a flag the agent checks between graph nodes and the adapter checks between chunks.
+
+- **The cache key decides correctness, not just speed.** Key = hash of (normalised question, corpus version, prompt version, model). Re-ingesting documents, editing a prompt or switching models changes every key, so stale answers are never served; they simply expire (CAC-02). The prompt version is a hash of the prompt text, so nobody has to remember to bump it. Errors are never cached; "I don't know" is cached for only 2 minutes (CAC-03).
+
+- **Identical concurrent requests should share one computation.** Without *request coalescing*, a popular question arriving 50 times during a 2 s generation costs 50 generations, because the cache is only filled at the end (a *cache stampede*). The first request starts the run; the others wait for it. The run belongs to the group, not to the first client, so the first client hanging up does not fail the others; it is cancelled only when everyone has left (API-04, LLM-05).
+
+- **Graceful shutdown has three parts.** Stop accepting new connections, let in-flight requests finish within a grace period, and tell the load balancer early (readiness turns to `shutting_down`). Tested for real: `docker compose stop gateway` during an 8 s request, and the request still finished with 200. Compose's `stop_grace_period` (35 s) must be longer than the app's own grace (30 s), or Docker kills it mid-answer.
+
+- **A mock that cannot misbehave tests nothing.** The mock LLM can add latency, delay the first token, fail with 429/503 and `Retry-After`, return empty answers, send malformed chunks, drop the connection mid-stream, hang, and imitate the format quirks of Ollama, vLLM and others. Its "ollama" format was copied from the real server's output with `curl`, not from documentation. One contract test runs the same adapter against real Ollama to check the mock has not drifted.
+
+### What the tests found
+
+- My SSE response inherited a `Content-Length: 0` header from Starlette's base class, so the first streamed byte broke the protocol. Streaming responses must not declare a length.
+- redis-py 8 retries 3 times with backoff by default. During a Redis outage that would have added seconds to every request; the gateway now turns it off and applies its own policy.
+- The drill created an API key and used it immediately: 401. The key snapshot refreshes every 30 s (ADR-025), which is the designed trade-off; the scripts now wait for the key. Worth knowing as an operator: new and revoked keys take up to 30 s.
+- Two `conftest.py` files in different test folders both exported helpers; Python can only have one module called `conftest`. Helpers now live in `agent_helpers.py` and `gw_helpers.py`.
+
+### Measured locally (development numbers, not results)
+
+2026-10-06, compose stack with Ollama `qwen2.5:3b-instruct` on an RTX 3060 Laptop GPU:
+
+| What | Value |
+|---|---|
+| First answer after the gateway started (host run, from the request log) | 2.3 s total: retrieval 444 ms, time to first token 344 ms, 85 tokens generated |
+| Answer in the compose demo (`make demo LLM=ollama`) | 1.6 s |
+| Same question again (cache hit) | 0.1 s |
+| Off-topic question (no model call) | 0.09 s |
+| Gateway memory after the demo | 347 MiB (limit 1 GiB) |
+| Cold start of the lite stack (`make down && make up-lite`) | ready in about 9 s, 0 restarts |
+| Recovery after Redis / PostgreSQL / Qdrant restart | 3.4 s / 1.2 s / 1.1 s |
+
+### Interview questions I can now answer
+
+1. *Your LLM backend starts returning 503s under load. What should the API in front of it do?*
+   Retry a small, bounded number of times with exponential backoff and full jitter, honouring `Retry-After`. Count consecutive failures; past a threshold, open a circuit breaker and fail fast with 503 and `Retry-After` for a cooldown, then let one trial request through. Do not retry timeouts or half-finished streams, and do not cache errors. Expose the error counts and breaker state as metrics.
+2. *How do you design a cache for LLM answers so it never serves a stale answer?*
+   Put everything the answer depends on in the key: the normalised question, the corpus version, the prompt version (a hash of the prompt text) and the model identity. Changing any of them creates new keys; old ones expire. Cache only successful answers, give "I don't know" a short TTL, never cache errors, and make the cache fail open. Turn it off for benchmarks.
+3. *A user closes the browser halfway through a long generation. What happens in your system?*
+   The SSE response notices the disconnect, closes its event stream, and leaves the request group. If nobody else is waiting for the same answer, the run is cancelled: the agent stops at its next step, and the adapter closes the connection to the model server at the next chunk, which makes the server stop generating. The thread slot is released when the thread really ends, so the concurrency limit stays honest. A test checks the mock sees the cancelled stream and no runs are left.

@@ -2,6 +2,30 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Phase 2: API service (2026-10-06)
+
+### Added
+- `services/gateway` (`fxassist-gateway serve | create-key | revoke-key | list-keys`): `POST /v1/ask` with SSE (default) or JSON, `/healthz`, `/readyz`, `/v1/info`. API keys hashed in PostgreSQL and checked from an in-memory snapshot; token-bucket rate limit in Redis (Lua, Redis clock) with a stricter in-memory fallback; answer cache keyed on question, corpus, prompt and model versions; request coalescing; bounded agent queue; request IDs; non-blocking request log; graceful shutdown with draining; the gateway's informational disclaimer on every answer.
+- LLM adapter in `fxassist_agent.llm` (used by the CLI, the eval and the gateway): always-streaming, format normalisation, timeouts, retries with backoff and full jitter honouring `Retry-After`, circuit breaker, one retry on empty answers, context-length check, cooperative cancellation, per-call timings.
+- `services/mock_llm` (`fxassist-mock-llm`): configurable misbehaving OpenAI-compatible server with runtime config and stats endpoints.
+- Dockerfiles for the gateway and mock LLM (multi-stage, non-root, embedding model baked in); both join the compose lite set. `make up` points the gateway at Ollama, `make up-lite` at the mock.
+- Make targets `serve`, `mock-llm`, `api-key`, `drill`, `demo` (`LLM=ollama` for the real model).
+- `scripts/drill.py`: stops Redis, PostgreSQL and Qdrant one at a time and checks the gateway. `scripts/demo.py`. `bench/guard.py` (CAC-05).
+- Runbooks `qdrant-down.md` and `redis-down.md` from the drill.
+- Proposed ADR-024 (stream progress, then the validated answer) and ADR-025 (key snapshot), awaiting approval.
+- 123 new tests (248 in total, offline): mock features, adapter against the mock and against Ollama when it runs, gateway API, cache, dependencies.
+
+### Changed
+- The agent takes a per-request `RunControl` (cancellation, progress) and reports an `error_code`; vector search failures become `store_unavailable` instead of an exception.
+- `PROMPT_VERSION` (hash of the prompt texts) added for the cache key.
+- Test helpers moved from `conftest.py` to `agent_helpers.py` / `gw_helpers.py` (two `conftest` modules cannot both be imported). Pytest runs with the repo root on `pythonpath`.
+- `make bootstrap` defaults to Phase 2.
+
+### Fixed during the phase
+- SSE responses sent `Content-Length: 0` (inherited from Starlette's `Response`).
+- redis-py's default 3 retries would have slowed every request during a Redis outage; disabled in favour of the gateway's own policy.
+- The mock's "hang" mode kept test servers from shutting down; it now ends when the client leaves.
+
 ## Phase 1: RAG core (2026-10-06)
 
 ### Added

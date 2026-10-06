@@ -56,6 +56,22 @@ Plain-language definitions of every term used in this project. Extends the gloss
 - **Compose profile:** a label that groups optional services; they start only when that profile is enabled (`COMPOSE_PROFILES=full`). *(Phase 0)*
 - **Named volume:** Docker-managed storage that outlives the container, used for database files. *(Phase 0)*
 
+## API and resilience (Phase 2)
+
+- **SSE (Server-Sent Events):** a one-way stream from server to browser over plain HTTP: lines of `event:` and `data:`, separated by blank lines. Simpler than WebSockets when only the server talks. *(Phase 2)*
+- **Fail open / fail closed:** when a dependency fails, *fail open* skips it and carries on (the cache); *fail closed* refuses the request (no documents, no answer). *(Phase 2)*
+- **Token bucket:** a rate limiter that refills N tokens per second up to a burst size; each request spends one. Allows short bursts while capping the average. *(Phase 2)*
+- **Exponential backoff with full jitter:** wait a random time between 0 and base x 2^attempt before retrying, so many clients do not retry at the same moment. *(Phase 2)*
+- **Circuit breaker:** after repeated failures, stop calling a dependency for a while and fail fast; then let one trial call through to see if it recovered (closed, open, half-open). *(Phase 2)*
+- **Request coalescing (single flight):** identical requests arriving together share one computation instead of each doing the work. *(Phase 2)*
+- **Cache stampede:** many requests miss the cache for the same key at once and all recompute it. Coalescing prevents it. *(Phase 2)*
+- **Backpressure:** a slow consumer slowing the producer down, instead of the producer buffering without limit. *(Phase 2)*
+- **Graceful shutdown / draining:** on a stop signal, refuse new work, finish in-flight work within a deadline, then exit. *(Phase 2)*
+- **Time to first token (TTFT):** see the architecture glossary; measured inside the LLM adapter, separately from retrieval and queueing. *(Phase 2)*
+- **Request ID:** a unique ID per request, returned in `X-Request-ID` and written on every log line and log row, so one request can be followed everywhere. *(Phase 2)*
+- **Constant-time comparison:** comparing secrets in a way that takes the same time whether they match early or late, so timing does not leak information (`hmac.compare_digest`). *(Phase 2)*
+- **Contract test:** the same test run against the mock and the real server, to catch the mock drifting from reality. *(Phase 2)*
+
 ## Developer tooling
 
 - **Lockfile (`uv.lock`):** a file recording the exact version and hash of every installed package, so every install is identical. *(Phase 0)*
