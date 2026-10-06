@@ -9,4 +9,7 @@
 !services/gateway/src/**
 !services/mock_llm/pyproject.toml
 !services/mock_llm/src/**
+!services/watchdog/pyproject.toml
+!services/watchdog/src/**
+!data/sources.yaml
 **/__pycache__

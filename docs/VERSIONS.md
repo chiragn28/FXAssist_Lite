@@ -74,10 +74,24 @@ Measured sizes (2026-10-06): gateway image about 590 MB of content (virtualenv 4
 | FastAPI built-in telemetry | 0.142.2 | **Observed, not documented by me before:** with an OTel SDK installed, FastAPI emits its own server span (`POST /v1/ask`), `fastapi.endpoint`/`fastapi.dependencies` spans and `http.server.*` metrics labelled by route template. The gateway's own span is named `fxassist.ask` to avoid a duplicate name | Spans listed from an in-memory exporter in a test run |
 | Langfuse Cloud (optional) | Hobby tier | OTLP/HTTP only (no gRPC) at `https://cloud.langfuse.com/api/public/otel/v1/traces` (EU) or `us.cloud.langfuse.com` (US); `Authorization: Basic base64(public:secret)`; header `x-langfuse-ingestion-version: 4`. Maps `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.prompt`/`gen_ai.completion`, `input.value`/`output.value`. Free tier: 50k units/month, 30 days data access, 2 users, no credit card. Not verified: what happens past 50k units on the free tier (the pricing page does not say), so tracing stays optional and failure-tolerant (DEP-03) | langfuse.com/docs/opentelemetry/get-started, langfuse.com/integrations/native/opentelemetry, langfuse.com/pricing, read 2026-10-06. **No account was created; export to Langfuse itself is untested** |
 
+## Phase 4: Kubernetes
+
+Binaries installed into `~/.local/bin` (user-level, no sudo) from the official release URLs, each checked against its published SHA-256.
+
+| Component | Version | Why | Verified how (2026-10-07) |
+|---|---|---|---|
+| kind | v0.33.0 | Latest release (2026-08-26) | GitHub releases API; `sha256sum -c` of `kind-linux-amd64.sha256sum` |
+| kind node image | `kindest/node:v1.37.0@sha256:a1ed56cf...580ae5` | The default image named in the kind v0.33.0 release notes, pinned by digest in `deploy/kind/cluster.yaml` | Release notes |
+| kubectl | v1.37.1 | The installed v1.32.2 was outside the supported skew (±1 minor) for a v1.37 cluster; v1.37.1 is `stable-1.37.txt` | dl.k8s.io checksum |
+| Helm | v4.3.0 | Latest (2026-09-09). **Helm 4 differences used here:** `--wait` alone means the kstatus "watcher" strategy (default without the flag: `hookOnly`); `--wait-for-jobs`; `--atomic` is now `--rollback-on-failure`; server-side apply by default for new releases; post-renderers are plugins. Chart `apiVersion: v2` works unchanged (v3 charts are experimental) | helm.sh/docs/overview; `helm upgrade --help`; `sha256sum -c` |
+| metrics-server | v0.9.0 | For the gateway HPA; patched with `--kubelet-insecure-tls` because kind's kubelets use self-signed certificates | GitHub releases API; HPA reported `cpu: 1%/70%` |
+| nginx (proxy check only) | `nginxinc/nginx-unprivileged:1.30.5-alpine` | Current stable line, non-root image; used only by `scripts/kind_proxy_check.sh` | Docker Hub tags |
+| Our images | `fxassist/{gateway,mock-llm,watchdog}:0.4.0` | Built by `make images`. Compressed sizes: 234 MB, 51 MB, 47 MB; budgets 270/60/55 MB in `scripts/image_budget.py` | `docker image inspect .Size` (equals `docker save` size: compressed layers) |
+
+**kind with Docker's containerd image store:** `kind load docker-image` failed with `ctr: content digest ...: not found`, because it exports every platform of an image index. `make kind-load` exports one platform (`docker save --platform linux/amd64`) and runs `kind load image-archive`.
+
 ## Later phases: planned, re-check before pinning
 
 | Component | Latest seen | Phase | Notes |
 |---|---|---|---|
-| kind | v0.33.0 (2026-08-26) | 4 | Check the node image matching the release notes |
-| Helm | v4.3.0 (2026-09-09) | 4 | **Helm 4 is a major version.** Many tutorials still show Helm 3 commands and chart behaviour; read the Helm 4 docs |
 | vLLM | not checked yet | 5 | Must confirm T4 (compute capability 7.5) and float16 support for the exact version (ADR-006, GPU-01) |

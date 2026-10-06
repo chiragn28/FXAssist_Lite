@@ -1,0 +1,10 @@
+# CI (GitHub Actions runner, 7 GB RAM, 2 CPUs): kind settings plus a smaller footprint.
+images:
+  pullPolicy: Never
+gateway:
+  replicas: 1
+  hpa: {enabled: false, minReplicas: 1, maxReplicas: 1, cpuUtilization: 70}
+  pdbMinAvailable: 0
+  service:
+    type: NodePort
+    nodePort: 30080

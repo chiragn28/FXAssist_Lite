@@ -1,0 +1,58 @@
+{{- if .Values.ingest.enabled }}
+{{- $c := dict "root" . "component" "ingest" -}}
+# A plain Job, not a Helm hook: the gateway is not ready until the collection exists, so a
+# post-install hook would wait forever on `helm --wait`. One Job per revision (Job specs are
+# immutable); ingestion is idempotent (DAT-02), so re-running it only costs the downloads.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "fx.name" $c }}-{{ .Release.Revision }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {{- include "fx.labels" $c | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+      initContainers:
+        # Qdrant must answer before ingestion starts (DEP-04 on Kubernetes).
+        - name: wait-for-qdrant
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "fx.containerSecurity" (dict "uid" 10001 "readOnly" true) | nindent 10 }}
+          command: ["python", "-c"]
+          args:
+            - |
+              import time, urllib.request
+              for _ in range(120):
+                  try:
+                      urllib.request.urlopen("http://{{ .Release.Name }}-qdrant:6333/readyz", timeout=2); break
+                  except Exception:
+                      time.sleep(2)
+              else:
+                  raise SystemExit("Qdrant not ready after 240 s")
+      containers:
+        - name: ingest
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: ["sh", "-c", "cp /app/data/sources.yaml /work/ && exec fxassist \"$@\"", "--"]
+          args: {{- toYaml .Values.ingest.args | nindent 12 }}
+          {{- include "fx.containerSecurity" (dict "uid" 10001 "readOnly" true) | nindent 10 }}
+          env:
+            - {name: FXA_DATA_DIR, value: /work}
+            - {name: FXA_QDRANT_URL, value: "http://{{ .Release.Name }}-qdrant:6333"}
+            - {name: HF_HUB_OFFLINE, value: "1"}
+            - {name: FXA_EMBED_BATCH_SIZE, value: {{ .Values.ingest.embedBatchSize | quote }}}
+          resources: {{- toYaml .Values.ingest.resources | nindent 12 }}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: work, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+{{- end }}

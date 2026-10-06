@@ -6,6 +6,7 @@ repos:
     hooks:
       - id: check-yaml
         args: [--allow-multiple-documents]
+        exclude: ^deploy/helm/[^/]+/templates/  # Go templates; checked by helm lint and tests/test_helm.py
       - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace

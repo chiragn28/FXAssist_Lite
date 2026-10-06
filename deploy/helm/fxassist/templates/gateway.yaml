@@ -1,0 +1,136 @@
+{{- $c := dict "root" . "component" "gateway" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+data:
+  FXA_QDRANT_URL: http://{{ .Release.Name }}-qdrant:6333
+  FXA_REDIS_URL: redis://{{ .Release.Name }}-redis:6379/0
+  FXA_POSTGRES_HOST: {{ .Release.Name }}-postgres
+  FXA_POSTGRES_PORT: "5432"
+  FXA_POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  FXA_POSTGRES_DB: {{ .Values.postgres.database | quote }}
+  FXA_LLM_BASE_URL: http://{{ .Release.Name }}-mock-llm:8080/v1
+  FXA_GATEWAY_HOST: 0.0.0.0
+  FXA_METRICS_HOST: 0.0.0.0
+  FXA_METRICS_PORT: "9464"
+  FXA_SHUTDOWN_GRACE_S: "30"
+  {{- range $k, $v := .Values.gateway.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  {{- if not .Values.gateway.hpa.enabled }}
+  replicas: {{ .Values.gateway.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "fx.selector" $c | nindent 6 }}
+  # K8S-07: never fewer ready pods than wanted during a rollout.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {{- include "fx.labels" $c | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson .Values.gateway | sha256sum | trunc 16 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.gateway.terminationGracePeriodSeconds }}
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: gateway
+          image: {{ .Values.images.gateway }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          args: ["fxassist-gateway", "serve"]
+          {{- include "fx.containerSecurity" (dict "uid" 10001 "readOnly" true) | nindent 10 }}
+          ports:
+            - {name: http, containerPort: 8000}
+            - {name: metrics, containerPort: 9464}
+          envFrom:
+            - configMapRef:
+                name: {{ include "fx.name" $c }}
+          env:
+            - name: FXA_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.secretName }}, key: postgres-password}
+          resources: {{- toYaml .Values.gateway.resources | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            {{- toYaml .Values.gateway.startupProbe | nindent 12 }}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            {{- toYaml .Values.gateway.readinessProbe | nindent 12 }}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            {{- toYaml .Values.gateway.livenessProbe | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ .Values.gateway.preStopSleepSeconds }}"]
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  type: {{ .Values.gateway.service.type }}
+  selector: {{- include "fx.selector" $c | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      {{- if and (eq .Values.gateway.service.type "NodePort") .Values.gateway.service.nodePort }}
+      nodePort: {{ .Values.gateway.service.nodePort }}
+      {{- end }}
+---
+# OBS-04: metrics get their own ClusterIP Service: reachable inside the cluster only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fx.name" $c }}-metrics
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{- include "fx.selector" $c | nindent 4 }}
+  ports:
+    - {name: metrics, port: 9464, targetPort: metrics}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.gateway.pdbMinAvailable }}
+  selector:
+    matchLabels: {{- include "fx.selector" $c | nindent 6 }}
+{{- if .Values.gateway.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ include "fx.name" $c }}}
+  minReplicas: {{ .Values.gateway.hpa.minReplicas }}
+  maxReplicas: {{ .Values.gateway.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: {{ .Values.gateway.hpa.cpuUtilization }}}
+{{- end }}

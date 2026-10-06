@@ -17,6 +17,7 @@ COPY pyproject.toml uv.lock ./
 COPY services/agent/pyproject.toml services/agent/
 COPY services/gateway/pyproject.toml services/gateway/
 COPY services/mock_llm/pyproject.toml services/mock_llm/
+COPY services/watchdog/pyproject.toml services/watchdog/
 RUN uv sync --locked --no-dev --package fxassist-gateway --no-install-workspace
 
 COPY services/agent/src services/agent/src
@@ -30,10 +31,13 @@ TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/data/cache/fastembed')"
 FROM python:3.11.17-slim-trixie
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 COPY --from=build --chown=10001:10001 /app /app
+# The corpus registry, for the ingestion Job on Kubernetes (`fxassist ingest`).
+COPY --chown=10001:10001 data/sources.yaml /app/data/sources.yaml
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     HF_HUB_OFFLINE=1 \
     FXA_DATA_DIR=/app/data \
+    FXA_EMBED_CACHE_DIR=/app/data/cache/fastembed \
     FXA_GATEWAY_HOST=0.0.0.0
 WORKDIR /app
 USER 10001:10001

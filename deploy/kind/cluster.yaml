@@ -1,0 +1,15 @@
+# kind cluster for FXAssist Lite (ADR-013). One node, no GPU. `make kind-up` replaces
+# ${FXA_KIND_GATEWAY_PORT} (ENV-04) and creates it with its own kubeconfig file, so your
+# existing kubectl contexts are left alone.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: fxassist
+nodes:
+  - role: control-plane
+    # The node image published for kind v0.33.0 (its release notes), pinned by digest.
+    image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+    extraPortMappings:
+      # The gateway's NodePort (values-kind.yaml), reachable on the laptop only.
+      - containerPort: 30080
+        hostPort: ${FXA_KIND_GATEWAY_PORT}
+        listenAddress: 127.0.0.1

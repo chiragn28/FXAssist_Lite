@@ -1,0 +1,9 @@
+# kind: reach the gateway from the laptop through a NodePort that deploy/kind/cluster.yaml
+# maps to 127.0.0.1:${FXA_KIND_GATEWAY_PORT}. Images are loaded into the node, never pulled
+# (K8S-08: a missing image fails fast instead of looking for it on Docker Hub).
+images:
+  pullPolicy: Never
+gateway:
+  service:
+    type: NodePort
+    nodePort: 30080

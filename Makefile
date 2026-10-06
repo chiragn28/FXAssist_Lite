@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 MAKEFLAGS += --no-print-directory
 
 # Raise this as phases are completed; `make bootstrap` then requires those tools.
-PHASE ?= 3
+PHASE ?= 4
 
 # Use .env when present, otherwise the committed defaults (ENV-04: ports come from here).
 ENV_FILE ?= $(if $(wildcard .env),.env,.env.example)
@@ -30,7 +30,9 @@ endef
 .PHONY: help bootstrap install lint fmt test secrets-scan check \
         up up-lite up-mock pull-model down down-volumes ps logs \
         fetch ingest ask eval experiment sources-md \
-        serve mock-llm api-key drill load dashboard kind-up kind-deploy demo
+        serve mock-llm api-key drill load dashboard demo \
+        images image-budget kind-up kind-load kind-deploy kind-down kind-key kind-status \
+        kind-rbac-check kind-watchdog-drill kind-rollout-test helm-check
 
 ##@ Setup
 help: ## Show this help
@@ -145,12 +147,81 @@ load: ## Send a small mixed load to fill the dashboard (not a benchmark): make l
 dashboard: ## Regenerate the Grafana dashboard JSON from its spec
 	uv run python observability/grafana/build_dashboard.py
 
-##@ Kubernetes (Phase 4)
-kind-up: ## Create the local kind cluster
-	$(call not_yet,4)
+##@ Containers and Kubernetes (Phase 4)
+IMAGE_TAG := 0.4.0
+APP_IMAGES := fxassist/gateway:$(IMAGE_TAG) fxassist/mock-llm:$(IMAGE_TAG) fxassist/watchdog:$(IMAGE_TAG)
+STORE_IMAGES := qdrant/qdrant:v1.19.2-unprivileged redis:8.8.3 postgres:18.6
+KIND_CLUSTER := fxassist
+KIND_NS := fxassist
+FXA_KIND_GATEWAY_PORT ?= 8080
+# A separate kubeconfig: kind does not switch your current kubectl context (ADR-013).
+export KUBECONFIG := $(HOME)/.kube/kind-$(KIND_CLUSTER)
+HELM_CHART := deploy/helm/fxassist
+METRICS_SERVER_URL := https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
 
-kind-deploy: ## Build, load and deploy the Helm chart to kind
-	$(call not_yet,4)
+images: ## Build the gateway, mock LLM and watchdog images
+	docker build -f services/gateway/Dockerfile -t fxassist/gateway:$(IMAGE_TAG) .
+	docker build -f services/mock_llm/Dockerfile -t fxassist/mock-llm:$(IMAGE_TAG) .
+	docker build -f services/watchdog/Dockerfile -t fxassist/watchdog:$(IMAGE_TAG) .
+
+image-budget: ## Fail if an image is over its size budget (CI-04)
+	uv run python scripts/image_budget.py
+
+kind-up: ## Create the kind cluster (one node) with metrics-server for the HPA
+	@if kind get clusters 2>/dev/null | grep -qx $(KIND_CLUSTER); then \
+		echo "kind cluster $(KIND_CLUSTER) already exists"; \
+	else \
+		mkdir -p $(dir $(KUBECONFIG)) && \
+		kind create cluster --name $(KIND_CLUSTER) --kubeconfig $(KUBECONFIG) --wait 120s \
+			--config <(sed 's/$${FXA_KIND_GATEWAY_PORT}/$(FXA_KIND_GATEWAY_PORT)/' deploy/kind/cluster.yaml); \
+	fi
+	kubectl apply -f $(METRICS_SERVER_URL) >/dev/null
+	@# kind's kubelets use self-signed certificates; metrics-server must accept them.
+	kubectl -n kube-system patch deployment metrics-server --type=json \
+		-p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]' \
+		>/dev/null 2>&1 || true
+	@echo "kubeconfig: $(KUBECONFIG)  (export KUBECONFIG=$(KUBECONFIG) to use kubectl directly)"
+
+KIND_PLATFORM ?= linux/amd64
+
+kind-load: images ## Build images and load them into the kind node (K8S-08)
+	@# `kind load docker-image` fails with Docker's containerd image store ("content digest
+	@# not found") because it exports every platform of an image. Export one platform instead.
+	@tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT && \
+	for image in $(APP_IMAGES) $(STORE_IMAGES); do \
+		docker image inspect $$image >/dev/null 2>&1 || docker pull -q --platform $(KIND_PLATFORM) $$image; \
+		docker save --platform $(KIND_PLATFORM) -o "$$tmp/image.tar" $$image && \
+		kind load image-archive "$$tmp/image.tar" --name $(KIND_CLUSTER) >/dev/null && \
+		echo "loaded $$image"; \
+	done
+
+kind-deploy: kind-load ## Build, load and install the Helm chart on kind; waits for ingestion
+	scripts/kind-secrets.sh $(KIND_NS) $(ENV_FILE)
+	helm upgrade --install fxassist $(HELM_CHART) --namespace $(KIND_NS) \
+		-f $(HELM_CHART)/values-kind.yaml $(HELM_ARGS) --wait --wait-for-jobs --timeout 20m
+	@echo "gateway: http://127.0.0.1:$(FXA_KIND_GATEWAY_PORT)  (make kind-key for an API key)"
+
+kind-key: ## Create an API key in the kind deployment
+	@kubectl -n $(KIND_NS) exec deploy/fxassist-gateway -- fxassist-gateway create-key --name kind-$$(date +%s)
+
+kind-status: ## Pods, services and the watchdog's last runs
+	kubectl -n $(KIND_NS) get pods,svc,hpa,pdb,cronjob,jobs
+
+kind-rbac-check: ## Prove the watchdog can restart one deployment and nothing else (K8S-05)
+	scripts/kind_rbac_check.sh $(KIND_NS)
+
+kind-watchdog-drill: ## Break the mock LLM and watch the watchdog restart it exactly once (K8S-03)
+	uv run python scripts/kind_watchdog_drill.py --namespace $(KIND_NS)
+
+kind-rollout-test: ## Roll the gateway while sending traffic; expect zero failed requests (K8S-07)
+	uv run python scripts/kind_rollout_test.py --namespace $(KIND_NS) --gateway http://127.0.0.1:$(FXA_KIND_GATEWAY_PORT)
+
+helm-check: ## helm lint, and show how each environment differs from the base (K8S-09)
+	helm lint $(HELM_CHART) -f $(HELM_CHART)/values-kind.yaml
+	uv run python scripts/helm_diff.py
+
+kind-down: ## Delete the kind cluster
+	kind delete cluster --name $(KIND_CLUSTER) --kubeconfig $(KUBECONFIG)
 
 ##@ Demo
 demo: LLM ?= mock

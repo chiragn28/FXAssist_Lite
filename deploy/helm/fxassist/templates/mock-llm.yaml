@@ -1,0 +1,43 @@
+{{- $c := dict "root" . "component" "mock-llm" -}}
+# Stands in for vLLM on kind (ADR-003, ADR-014): the watchdog's target.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "fx.selector" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "fx.labels" $c | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mock-llm
+          image: {{ .Values.images.mockLlm }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- include "fx.containerSecurity" (dict "uid" 10001 "readOnly" true) | nindent 10 }}
+          env:
+            - {name: FXA_MOCK_MODELS, value: mock-llm}
+            - {name: FXA_MOCK_CONFIG, value: {{ .Values.mockLlm.config | quote }}}
+          ports:
+            - {name: http, containerPort: 8080}
+          resources: {{- toYaml .Values.mockLlm.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  selector: {{- include "fx.selector" $c | nindent 4 }}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

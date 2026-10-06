@@ -1,0 +1,75 @@
+{{- if .Values.watchdog.enabled }}
+{{- $c := dict "root" . "component" "watchdog" -}}
+{{- $target := printf "%s-mock-llm" .Release.Name -}}
+# Canary watchdog (ADR-014). K8S-05: its ServiceAccount may `get` and `patch` exactly one
+# Deployment, the mock LLM, and nothing else. Proven with `make kind-rbac-check`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ $target | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fx.name" $c }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "fx.name" $c }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "fx.name" $c }}
+  labels: {{- include "fx.labels" $c | nindent 4 }}
+spec:
+  schedule: {{ .Values.watchdog.schedule | quote }}
+  concurrencyPolicy: Forbid  # never two runs deciding at once
+  startingDeadlineSeconds: 50
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 55
+      template:
+        metadata:
+          labels: {{- include "fx.labels" $c | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "fx.name" $c }}
+          containers:
+            - name: watchdog
+              image: {{ .Values.images.watchdog }}
+              imagePullPolicy: {{ .Values.images.pullPolicy }}
+              {{- include "fx.containerSecurity" (dict "uid" 10001 "readOnly" true) | nindent 14 }}
+              env:
+                - {name: FXA_WATCHDOG_LLM_URL, value: "http://{{ $target }}:8080/v1"}
+                - {name: FXA_WATCHDOG_MODEL, value: mock-llm}
+                - {name: FXA_WATCHDOG_DEPLOYMENT, value: {{ $target | quote }}}
+                - name: FXA_WATCHDOG_NAMESPACE
+                  valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+                - {name: FXA_WATCHDOG_FAILURES, value: {{ .Values.watchdog.failuresToRestart | quote }}}
+                - {name: FXA_WATCHDOG_COOLDOWN_S, value: {{ .Values.watchdog.cooldownSeconds | quote }}}
+                - {name: FXA_WATCHDOG_MAX_PER_HOUR, value: {{ .Values.watchdog.maxRestartsPerHour | quote }}}
+                - {name: FXA_WATCHDOG_SLOW_S, value: {{ .Values.watchdog.slowThresholdSeconds | quote }}}
+                - {name: FXA_WATCHDOG_TIMEOUT_S, value: {{ .Values.watchdog.timeoutSeconds | quote }}}
+              resources: {{- toYaml .Values.watchdog.resources | nindent 16 }}
+{{- end }}
