@@ -47,7 +47,14 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str = "qwen2.5:3b-instruct"
     llm_api_key: SecretStr = SecretStr("not-needed")
-    llm_timeout_s: float = 60.0
+    llm_timeout_s: float = 60.0  # total budget for one model call (LLM-01)
+    llm_connect_timeout_s: float = 5.0
+    llm_read_timeout_s: float = 30.0  # longest silence: before the first token or between tokens
+    llm_max_retries: int = 2  # retries after the first attempt, for 429/5xx/connect (LLM-04)
+    llm_backoff_base_s: float = 0.5
+    llm_backoff_max_s: float = 4.0
+    llm_breaker_failures: int = 5  # consecutive failures that open the circuit (LLM-04)
+    llm_breaker_reset_s: float = 30.0  # how long it stays open before one trial call
     llm_max_context_tokens: int = 4096  # Ollama's default context window
     llm_max_output_tokens: int = 400
     grader_enabled: bool = True

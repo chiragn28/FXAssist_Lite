@@ -10,7 +10,7 @@ import pytest
 from pypdf import PdfWriter
 from qdrant_client import QdrantClient
 
-from conftest import html_page, make_source
+from agent_helpers import html_page, make_source
 from fxassist_agent.chunking import ChunkStats, chunk_id, chunk_pages, make_splitter
 from fxassist_agent.embeddings import HashEmbedder
 from fxassist_agent.extract import (

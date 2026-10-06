@@ -11,7 +11,7 @@ import json
 import httpx
 import pytest
 
-from conftest import FakeLLM, make_source
+from agent_helpers import FakeLLM, make_source
 from fxassist_agent import prompts
 from fxassist_agent.chunking import chunk_id
 from fxassist_agent.citations import validate
@@ -391,11 +391,14 @@ def test_validator_accepts_grouped_citations_and_formatted_numbers() -> None:
 
 
 def _client(handler) -> OpenAICompatLLM:
-    llm = OpenAICompatLLM(
-        "http://localhost:11434/v1", "qwen2.5:3b-instruct", api_key="x", timeout_s=5
+    return OpenAICompatLLM(
+        "http://localhost:11434/v1",
+        "qwen2.5:3b-instruct",
+        api_key="x",
+        timeout_s=5,
+        backoff_base_s=0.0,
+        transport=httpx.MockTransport(handler),
     )
-    llm._client = httpx.Client(base_url=llm.base_url, transport=httpx.MockTransport(handler))
-    return llm
 
 
 def test_env03_model_not_pulled_gives_the_exact_fix() -> None:

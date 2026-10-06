@@ -1,0 +1,22 @@
+[project]
+name = "fxassist-gateway"
+version = "0.1.0"
+description = "FXAssist Lite API gateway: auth, rate limit, cache, streaming, request logs."
+requires-python = ">=3.11"
+# Versions verified on 2026-10-06 (docs/VERSIONS.md); exact pins live in uv.lock.
+dependencies = [
+    "fxassist-agent",
+    "fastapi>=0.142.2",
+    "uvicorn>=0.54.0",
+    "redis>=8.1.0",                     # cache and rate limit (ADR-010)
+    "psycopg[binary,pool]>=3.3.6",      # API keys and request log (ADR-011)
+    "opentelemetry-api>=1.45.1",        # metric call sites; exporters are configured in Phase 3
+    "opentelemetry-sdk>=1.45.1",
+]
+
+[project.scripts]
+fxassist-gateway = "fxassist_gateway.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.13"]
+build-backend = "uv_build"

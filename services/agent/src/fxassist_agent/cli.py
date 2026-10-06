@@ -13,7 +13,7 @@ from .embeddings import FastEmbedder
 from .fetch import fetch_all, fetched_dates
 from .graph import Agent, AgentDeps, AgentResult
 from .ingest import ingest_all
-from .llm import LLMError, OpenAICompatLLM
+from .llm import CircuitBreaker, LLMError, OpenAICompatLLM
 from .sources import load_excluded, load_sources, render_sources_md
 from .store import StoreError, VectorStore
 
@@ -51,6 +51,13 @@ def build_llm(settings: Settings) -> OpenAICompatLLM:
         settings.llm_model,
         api_key=settings.llm_api_key.get_secret_value(),
         timeout_s=settings.llm_timeout_s,
+        connect_timeout_s=settings.llm_connect_timeout_s,
+        read_timeout_s=settings.llm_read_timeout_s,
+        max_retries=settings.llm_max_retries,
+        backoff_base_s=settings.llm_backoff_base_s,
+        backoff_max_s=settings.llm_backoff_max_s,
+        max_context_tokens=settings.llm_max_context_tokens,
+        breaker=CircuitBreaker(settings.llm_breaker_failures, settings.llm_breaker_reset_s),
     )
 
 

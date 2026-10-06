@@ -32,6 +32,10 @@ class CollectionMissingError(StoreError):
     pass
 
 
+class StoreUnavailableError(StoreError):
+    """Qdrant could not be reached or failed during a request (DEP-01)."""
+
+
 @dataclass(frozen=True)
 class Hit:
     id: str
@@ -197,9 +201,14 @@ class VectorStore:
     # --- Reads -------------------------------------------------------------------
 
     def search(self, vector: list[float], limit: int) -> list[Hit]:
-        result = self.client.query_points(
-            self.collection, query=vector, limit=limit, with_payload=True, with_vectors=True
-        )
+        try:
+            result = self.client.query_points(
+                self.collection, query=vector, limit=limit, with_payload=True, with_vectors=True
+            )
+        except Exception as exc:  # qdrant-client raises several transport exception types
+            raise StoreUnavailableError(
+                f"Vector search failed ({type(exc).__name__}). Is Qdrant running? Try: make up"
+            ) from exc
         hits = []
         for p in result.points:
             payload = p.payload or {}

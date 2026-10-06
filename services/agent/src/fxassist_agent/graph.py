@@ -34,10 +34,11 @@ from langgraph.graph import END, START, StateGraph
 from . import prompts
 from .citations import validate
 from .config import Settings
+from .control import RunControl
 from .embeddings import Embedder
 from .guards import check_question
 from .llm import ChatLLM, LLMError
-from .store import Hit, VectorStore
+from .store import Hit, StoreUnavailableError, VectorStore
 
 log = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ class AgentResult:
     seconds: float = 0.0
     corpus_version: str | None = None
     rejected_answer: str | None = None
+    error_code: str | None = None  # set when outcome == "error"; the gateway maps it to HTTP
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -115,6 +117,7 @@ class AgentState(TypedDict, total=False):
     outcome: str
     reason: str
     message_key: str
+    error_code: str
     truncated: int
     grader_errors: int
     rejected_answer: str
@@ -128,6 +131,7 @@ class AgentDeps:
     embedder: Embedder
     llm: ChatLLM
     clock: Callable[[], float] = time.monotonic
+    control: RunControl | None = None  # cancellation and progress for one request (LLM-05)
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -216,13 +220,25 @@ class Agent:
 
     def _wrap(self, name: str, fn: Callable[[AgentState], dict]) -> Callable[[AgentState], dict]:
         def run(state: AgentState) -> dict:
+            control = self.deps.control
+            if control is not None and control.cancelled():  # LLM-05: the client went away
+                return {
+                    "outcome": "error",
+                    "message_key": "error",
+                    "error_code": "cancelled",
+                    "reason": f"cancelled before {name}",
+                    "steps": [{"node": name, "seconds": 0.0, "skipped": True}],
+                }
             if self.deps.clock() > state["deadline"]:  # RET-09: wall-clock cap
                 return {
                     "outcome": "error",
                     "message_key": "error",
+                    "error_code": "time_limit",
                     "reason": f"time limit of {self.s.max_request_seconds}s reached before {name}",
                     "steps": [{"node": name, "seconds": 0.0, "skipped": True}],
                 }
+            if control is not None:
+                control.stage(name)
             started = self.deps.clock()
             update = fn(state)
             update["steps"] = [{"node": name, "seconds": round(self.deps.clock() - started, 3)}]
@@ -408,7 +424,9 @@ class Agent:
             try:
                 state.update(node(state))
             except LLMError as exc:
-                state.update(outcome="error", message_key="error", reason=str(exc))
+                state.update(
+                    outcome="error", message_key="error", error_code=exc.code, reason=str(exc)
+                )
             if state.get("outcome"):
                 break
         return self._result(state, started)
@@ -430,11 +448,27 @@ class Agent:
                 **initial,
                 "outcome": "error",
                 "message_key": "error",
+                "error_code": "step_limit",
                 "reason": f"step limit of {self.s.max_graph_steps} reached",
             }
         except LLMError as exc:
-            log.error("LLM failure: %s", exc)
-            state = {**initial, "outcome": "error", "message_key": "error", "reason": str(exc)}
+            log.error("LLM failure (%s): %s", exc.code, exc)
+            state = {
+                **initial,
+                "outcome": "error",
+                "message_key": "error",
+                "error_code": exc.code,
+                "reason": str(exc),
+            }
+        except StoreUnavailableError as exc:  # DEP-01: never answer without the documents
+            log.error("vector store failure: %s", exc)
+            state = {
+                **initial,
+                "outcome": "error",
+                "message_key": "error",
+                "error_code": "store_unavailable",
+                "reason": str(exc),
+            }
         return self._result(state, started)
 
     def _result(self, state: dict, started: float) -> AgentResult:
@@ -463,4 +497,5 @@ class Agent:
             seconds=round(self.deps.clock() - started, 3),
             corpus_version=corpus_version,
             rejected_answer=state.get("rejected_answer"),
+            error_code=(state.get("error_code") or "agent_error") if outcome == "error" else None,
         )
