@@ -76,3 +76,30 @@ GIB = 1024**3
 def test_env02_docker_memory_tiers(mem_bytes: int, expected: str) -> None:
     """ENV-02: the VM reports slightly less than its configured size; tiers must allow for it."""
     assert expected in run(mem_bytes=mem_bytes).stdout
+
+
+def test_env04_taken_ports_are_reported_with_the_fix() -> None:
+    """Found by the fresh-clone test: a Windows-side PostgreSQL held 5432."""
+    example = str(ROOT / ".env.example")  # not your .env, whatever ports it sets
+    env_busy = {**os.environ, "FXA_BOOTSTRAP_BUSY_PORTS": "5432", "FXA_BOOTSTRAP_ENV": example}
+    result = subprocess.run(
+        [BASH, str(SCRIPT)],
+        cwd=ROOT,
+        env=env_busy,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert "port 5432 (FXA_POSTGRES_PORT) is taken" in result.stdout
+    assert "FXA_POSTGRES_PORT=55432" in result.stdout
+    free = subprocess.run(
+        [BASH, str(SCRIPT)],
+        cwd=ROOT,
+        env={**os.environ, "FXA_BOOTSTRAP_BUSY_PORTS": ""},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert "host ports free" in free.stdout

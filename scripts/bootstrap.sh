@@ -11,6 +11,8 @@
 # Test hooks (tests/test_bootstrap.py):
 #   FXA_BOOTSTRAP_HIDE="docker,uv"   makes those commands look missing
 #   FXA_BOOTSTRAP_DOCKER_MEM_BYTES=n pretends Docker reports n bytes of memory
+#   FXA_BOOTSTRAP_BUSY_PORTS="5432 6379" pretends those host ports are taken
+#   FXA_BOOTSTRAP_ENV=path            reads ports from this file instead of .env
 
 set -uo pipefail
 
@@ -168,6 +170,60 @@ elif has docker; then
 else
     miss "docker CLI" \
          "install Docker Desktop for Windows, then enable Settings > Resources > WSL integration for your distro"
+fi
+
+# --- Ports (ENV-04) -------------------------------------------------------------
+# Ask Docker itself whether each configured host port can be published: on WSL2 a port held
+# by a Windows program (for example a local PostgreSQL) is invisible to Linux tools, but makes
+# `docker compose up` fail. Found by the Phase 8 fresh-clone test. Ports already published by
+# FXAssist's own containers are fine. Uses an image that is already present; pulls nothing.
+section "Ports"
+# Effective ports: .env.example defaults, overridden by .env (or FXA_BOOTSTRAP_ENV, for tests).
+port_env="${FXA_BOOTSTRAP_ENV:-$REPO_ROOT/.env}"
+declare -A port_of=()
+for f in "$REPO_ROOT/.env.example" "$port_env"; do
+    [[ -f "$f" ]] || continue
+    while IFS='=' read -r k v; do port_of[$k]="$v"; done < <(grep -oE '^FXA_[A-Z_]+_PORT=[0-9]+' "$f")
+done
+port_vars=()
+for k in "${!port_of[@]}"; do port_vars+=("$k=${port_of[$k]}"); done
+probe_image=""
+if [[ -z "${FXA_BOOTSTRAP_BUSY_PORTS+x}" ]] && has docker && docker info >/dev/null 2>&1; then
+    for image in redis:8.8.3 postgres:18.6 python:3.11.17-slim-trixie; do
+        if docker image inspect "$image" >/dev/null 2>&1; then probe_image="$image"; break; fi
+    done
+fi
+if [[ -z "${FXA_BOOTSTRAP_BUSY_PORTS+x}" && -z "$probe_image" ]]; then
+    warn "ports not checked (needs Docker and a local image; nothing is pulled)"
+else
+    # Host ports published by FXAssist's own containers ("127.0.0.1:6333-6334->..." or ":8000->").
+    ours=" "
+    while IFS='|' read -r cname cports; do
+        [[ "$cname" == fxassist* ]] || continue
+        while [[ "$cports" =~ :([0-9]+)(-([0-9]+))?- ]]; do
+            first="${BASH_REMATCH[1]}"; last="${BASH_REMATCH[3]:-$first}"
+            for ((p = first; p <= last; p++)); do ours+="$p "; done
+            cports="${cports#*"${BASH_REMATCH[0]}"}"
+        done
+    done < <(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null || true)
+    busy=0
+    for entry in "${port_vars[@]}"; do
+        name="${entry%%=*}"; port="${entry#*=}"
+        if [[ -n "${FXA_BOOTSTRAP_BUSY_PORTS+x}" ]]; then
+            [[ " $FXA_BOOTSTRAP_BUSY_PORTS " == *" $port "* ]] && taken=1 || taken=0
+        elif [[ "$ours" == *" $port "* ]]; then
+            taken=0
+        elif docker run --rm -p "127.0.0.1:$port:9" --entrypoint true "$probe_image" >/dev/null 2>&1; then
+            taken=0
+        else
+            taken=1
+        fi
+        if (( taken )); then
+            warn "port $port ($name) is taken on this machine" "set another free port in .env, e.g. $name=$((port + 50000 > 65535 ? port + 1000 : port + 50000))"
+            busy=$((busy + 1))
+        fi
+    done
+    (( busy == 0 )) && ok "${#port_vars[@]} host ports free"
 fi
 
 # --- Disk -----------------------------------------------------------------------
