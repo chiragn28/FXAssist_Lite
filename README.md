@@ -2,7 +2,7 @@
 
 A zero-cost, self-hosted LLM platform that answers questions over public forex/CFD documentation, with citations. Built to learn and demonstrate LLMOps skills: vLLM serving and GPU tuning, RAG with Qdrant, LangGraph, observability, Kubernetes with Helm, and reliability engineering.
 
-> **Status: Phase 0 (scaffold) complete.** Nothing answers questions yet. See [Project status](#project-status).
+> **Status: Phase 1 (RAG core) complete.** `make ask` answers questions with citations from 26 public documents, using a local model. No API or Kubernetes deployment yet. See [Project status](#project-status).
 
 ## Honest limits
 
@@ -39,7 +39,7 @@ flowchart TB
     R -->|downloaded and committed| LOCAL
 ```
 
-Design and every decision (ADR-001 to ADR-021): [ARCHITECTURE.md](ARCHITECTURE.md). Failure scenarios and their tests: [EDGE_CASES.md](EDGE_CASES.md).
+Design and every decision (ADR-001 to ADR-023): [ARCHITECTURE.md](ARCHITECTURE.md). Failure scenarios and their tests: [EDGE_CASES.md](EDGE_CASES.md).
 
 ## Quickstart
 
@@ -70,12 +70,33 @@ cd fxassist_lite
 make bootstrap      # checks everything, prints the exact fix for anything missing
 make install        # creates .venv from uv.lock, installs the git hooks
 cp .env.example .env
-make up             # starts Qdrant, Redis and PostgreSQL, waits until healthy
-make test
+make up             # Qdrant, Redis, PostgreSQL and Ollama (on the GPU if there is one)
+make pull-model     # once: downloads qwen2.5:3b-instruct (about 2 GB) into Ollama
+make ingest         # downloads the 26 documents, chunks, embeds and stores them (about 2 min)
+make ask Q="What is negative balance protection?"
+make test           # offline unit tests: no Docker, network or model needed
+make eval           # evaluation set against the local model
 make down
 ```
 
-`make help` lists every target. Targets for later phases (`ingest`, `ask`, `eval`, `kind-up`, `kind-deploy`, `demo`) say which phase builds them and exit with code 2.
+Example:
+
+```
+$ make ask Q="What is a pip?"
+[answered, 1.2s]
+
+A pip is a unit of change in an exchange rate of a currency pair. In foreign exchange markets
+(forex), a pip is one unit of the fourth decimal place for dollar currencies, or one unit of the
+second decimal place for the Japanese yen. [S1]
+
+Sources:
+  [S1] Wikipedia: Percentage in point
+       https://en.wikipedia.org/wiki/Percentage_in_point
+
+Informational only, not financial advice.
+```
+
+`make help` lists every target. Targets for later phases (`kind-up`, `kind-deploy`, `demo`) say which phase builds them and exit with code 2.
 
 ### Port conflicts
 
@@ -91,8 +112,9 @@ Services are published on `127.0.0.1` only, so they are not reachable from your 
 
 | Profile | Starts | Docker memory |
 |---|---|---|
-| lite (`make up`) | data stores; the gateway and agent from Phase 2 | 4 GiB minimum |
-| full (`make up-full`) | lite plus Prometheus and Grafana (Phase 3) | 6 GiB |
+| lite (`make up-lite`) | data stores only; point `FXA_LLM_BASE_URL` at another server | 4 GiB minimum |
+| default (`make up`) | data stores plus Ollama. With an NVIDIA GPU the model sits in GPU memory; on CPU it needs about 3 GB more RAM | 4 GiB with a GPU, 7 GiB without |
+| full (`make up-full`) | default plus Prometheus and Grafana (Phase 3) | 6 GiB |
 | kind (Phase 4) | the whole stack inside a local Kubernetes cluster | 8 GiB |
 
 These budgets are estimates and will be replaced with measurements in Phases 3 and 4. Measured so far (2026-10-06, idle): Qdrant 76 MiB, PostgreSQL 35 MiB, Redis 6 MiB.
@@ -103,7 +125,7 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Scaffold, tooling, bootstrap, data-store compose, CI skeleton | Done |
-| 1 | RAG core: ingestion, Qdrant, LangGraph agent, eval set | Not started |
+| 1 | RAG core: ingestion, Qdrant, LangGraph agent, eval set | Done |
 | 2 | FastAPI gateway, cache, rate limit, LLM adapter, mock LLM | Not started |
 | 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Not started |
 | 4 | Containers, Helm, kind, watchdog | Not started |
@@ -114,14 +136,14 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 
 ## Results
 
-**PENDING.** No benchmark or evaluation has been run. Numbers will appear here only after real runs ([results/](results/)).
+**PENDING.** Reported benchmark and evaluation numbers come only from the GPU lab (Phases 6 and 7), in [results/](results/). Local development runs with a 4-bit model are described in [LEARNING.md](LEARNING.md) and are not results.
 
 ## Repository layout
 
 | Path | What lives there |
 |---|---|
 | `services/gateway` | FastAPI API: auth, rate limit, cache, streaming (Phase 2) |
-| `services/agent` | LangGraph RAG agent (Phase 1) |
+| `services/agent` | Ingestion and the LangGraph RAG agent (`fxassist` command) |
 | `services/mock_llm` | Configurable fake OpenAI-compatible server (Phase 2) |
 | `services/watchdog` | Canary CronJob that restarts a broken LLM deployment (Phase 4) |
 | `deploy/compose` | Docker Compose for the local stack |
@@ -129,8 +151,8 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | `observability/` | Prometheus config and Grafana dashboards (Phase 3) |
 | `bench/` | Benchmark harness (Phase 5) |
 | `notebooks/` | Kaggle GPU-lab notebooks (Phase 5) |
-| `eval/` | Evaluation questions and scoring (Phase 1) |
-| `data/` | Source list and fetch scripts; raw documents are not committed |
+| `eval/` | Evaluation questions, injection attacks and planted-excerpt scenarios |
+| `data/` | `sources.yaml` corpus registry and generated `SOURCES.md`; raw documents are not committed |
 | `scripts/` | Helper scripts, including `bootstrap.sh` |
 | `docs/` | Versions, glossary, runbooks, playbooks, interview notes |
 | `results/` | Real benchmark and eval output only |

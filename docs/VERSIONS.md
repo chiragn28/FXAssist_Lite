@@ -23,6 +23,25 @@ Status meanings: **Pinned** (in a lockfile, config or image tag), **Planned** (p
 | Redis | `redis:8.8.3` | `deploy/compose/compose.yaml` | Latest stable. Licence note: Redis 8 is offered under AGPLv3 among other licences, which is fine for local, unmodified use | Docker Hub tags API |
 | PostgreSQL | `postgres:18.6` | `deploy/compose/compose.yaml` | Latest stable (19 is still beta). **Breaking change in 18:** the data volume moved from `/var/lib/postgresql/data` to `/var/lib/postgresql` | Docker Hub tags API; official Dockerfile for 18/trixie (`VOLUME /var/lib/postgresql`, `PGDATA=/var/lib/postgresql/18/docker`) |
 
+## Phase 1: RAG core
+
+Python packages: lower bounds in `services/agent/pyproject.toml`, exact versions and hashes in `uv.lock`. Every API used was checked against the installed version (signatures inspected, not assumed).
+
+| Component | Version | Why | Verified how (2026-10-06) |
+|---|---|---|---|
+| langgraph | 1.2.14 | Agent control flow (ADR-007). Uses `StateGraph`, `START`, `END`, `add_conditional_edges`, `compile()`, `invoke(..., {"recursion_limit": n})`, `GraphRecursionError` | PyPI; imports and `compile` signature inspected |
+| langchain-text-splitters | 1.1.3 | `RecursiveCharacterTextSplitter` only (ADR-007) | PyPI |
+| qdrant-client | 1.19.1 | Matches server v1.19.2. Uses collection-level `metadata` (create and update; updates merge), `query_points`, `scroll`, and in-memory mode for tests | `create_collection`/`update_collection` signatures inspected; metadata round-trip tested in `:memory:` mode |
+| fastembed | 0.8.1 | ONNX Runtime embeddings (ADR-023). **Note:** its `BAAI/bge-small-en-v1.5` is a *quantised* ONNX export (`Qdrant/bge-small-en-v1.5-onnx-Q`, MIT licence, 384 dims, truncates at 512 tokens). `passage_embed(texts, batch_size=...)` takes batch size as a keyword | `TextEmbedding.list_supported_models()`; a positional `batch_size` raised `TypeError` on first run |
+| onnxruntime | 1.30.0 | Pulled in by fastembed; requires Python >= 3.11 | PyPI |
+| pypdf | 6.19.0 | PDF text, one page at a time (DAT-04) | PyPI |
+| trafilatura | 2.3.0 | Main-content extraction from HTML (DAT-05) | PyPI |
+| httpx | 0.28.1 | Downloads and the OpenAI-compatible client; `MockTransport` in tests | PyPI |
+| pydantic-settings | 2.15.0 | `FXA_*` settings from env and `.env` | PyPI |
+| Ollama | `ollama/ollama:0.35.1` (wrapped as `fxassist/ollama:0.35.1`) | Latest stable (0.40.0 was still a release candidate). The image runs as root, so `deploy/compose/ollama/Dockerfile` switches to uid 1000. Default context window is **4096 tokens**, which sets the RAG context budget (RET-06) | Docker Hub tags; GitHub releases API; image config inspected (`User=` empty); `ollama ps` shows `100% GPU`, `CONTEXT 4096` |
+| Local model | `qwen2.5:3b-instruct` (Q4_K_M, 2.2 GB in GPU memory) | Same model family as the GPU lab (ADR-005), quantised for a 6 GB laptop GPU | Tag listed at ollama.com/library/qwen2.5/tags; answered through `/v1/chat/completions` |
+| uv_build | >=0.8.4,<0.13 | Build backend for the workspace member | uv documentation for workspace packages |
+
 ## Later phases: planned, re-check before pinning
 
 | Component | Latest seen | Phase | Notes |
@@ -30,8 +49,4 @@ Status meanings: **Pinned** (in a lockfile, config or image tag), **Planned** (p
 | kind | v0.33.0 (2026-08-26) | 4 | Check the node image matching the release notes |
 | Helm | v4.3.0 (2026-09-09) | 4 | **Helm 4 is a major version.** Many tutorials still show Helm 3 commands and chart behaviour; read the Helm 4 docs |
 | vLLM | not checked yet | 5 | Must confirm T4 (compute capability 7.5) and float16 support for the exact version (ADR-006, GPU-01) |
-| LangGraph, LangChain splitters | not checked yet | 1 | APIs change quickly (ADR-007) |
-| qdrant-client | not checked yet | 1 | Must be compatible with server v1.19.x |
-| Embedding runtime for bge-small | not checked yet | 1 | Choice between sentence-transformers (pulls in PyTorch, large images) and an ONNX runtime such as fastembed; decided in Phase 1 with an ADR |
 | OpenTelemetry SDK, Prometheus, Grafana, Langfuse SDK | not checked yet | 3 | |
-| Ollama local model | not checked yet | 1 | Candidate: a small Qwen2.5 tag; confirm the exact tag exists |

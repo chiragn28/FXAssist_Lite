@@ -11,4 +11,5 @@ Rules that are easy to forget:
 - Containers run as non-root. LF line endings. No secrets in git.
 
 Commands: `make help`, `make check` (lint, tests, lockfile), `make up` / `make down`.
-Current phase: **0 complete**; next is Phase 1 (RAG core). Raise `PHASE ?=` in the Makefile when a phase is done.
+Current phase: **1 complete**; next is Phase 2 (API service). Raise `PHASE ?=` in the Makefile when a phase is done.
+The repo lives in WSL2 at `~/fxassist_lite` (ADR-019). Agent tests: `uv run pytest services/agent/tests` (offline).
