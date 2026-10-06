@@ -2,6 +2,18 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Phase 8: Documentation and evidence (2026-10-07)
+
+### Added
+- `docs/INTERVIEW_NOTES.md`, `docs/DEMO_SCRIPT.md`, `docs/RESUME_BULLETS.md` (no numbers until `results/` has GPU-lab data).
+- `make eval-record` / `fxassist-gateway record-eval`: evaluation history in PostgreSQL, as ADR-011 promised.
+- `make bootstrap` checks that every configured host port can be published by Docker (ENV-04), found by the fresh-clone test.
+- README: what is tested, the document map, final status. ARCHITECTURE: a dated status column in the JD coverage matrix.
+
+### Verified
+- Fresh clone (ENV-05): `make bootstrap && make install && cp .env.example .env && make demo` on new volumes, 2 min 42 s, all four demo questions answered.
+- Edge-case register: 99 of 102 rows DONE; open: CI-02 (needs a fork PR on GitHub), GPU-03 and GPU-08 (need the Kaggle runs).
+
 ## Phase 5: CI/CD and GPU lab preparation (2026-10-07)
 
 ### Added

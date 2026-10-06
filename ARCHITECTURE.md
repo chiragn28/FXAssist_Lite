@@ -238,22 +238,22 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 
 ## 5. JD coverage and honesty matrix
 
-| JD requirement | Status | Evidence |
-|---|---|---|
-| vLLM, Hugging Face, self-hosted LLM | Proven (T4) | `results/BENCHMARKS.md` |
-| Inference optimization (latency, throughput, KV cache, concurrency) | Proven (T4) | benchmark matrix, tuning table |
-| NVIDIA GPU performance | Partial: T4 only | memory and utilization notes |
-| Multi-GPU | Partial: 2x T4 over PCIe, if available | `results/tensor_parallel.md` |
-| Kubernetes, Docker, Helm | Proven on kind | Helm chart, kind e2e test |
-| AWS / EKS | Not proven | stated in README |
-| LLM reliability (health, recovery, restarts) | Proven on kind with a mock | watchdog, drills |
-| Observability (Langfuse, OTel, Prometheus, Grafana) | Proven | dashboards, traces |
-| RAG, embeddings, Qdrant | Proven | eval report |
-| LangChain / LangGraph | Proven (LangGraph core, LangChain utilities) | graph code |
-| SGLang, Ollama | Ollama: used. SGLang: stretch | notes |
-| Redis, PostgreSQL | Proven | schema, cache metrics |
-| CI/CD | Proven | workflows |
-| Production troubleshooting | Partial: induced failures only | runbooks |
+| JD requirement | Target | Evidence | Status on 2026-10-07 |
+|---|---|---|---|
+| vLLM, Hugging Face, self-hosted LLM | Proven (T4) | `results/BENCHMARKS.md` | PENDING: lab built and dry-run; vLLM 0.31.0 checked for the T4; no GPU run yet |
+| Inference optimization (latency, throughput, KV cache, concurrency) | Proven (T4) | benchmark matrix, tuning table | PENDING: matrix and method written (docs/BENCHMARK_METHOD.md); no numbers yet |
+| NVIDIA GPU performance | Partial: T4 only | memory and utilization notes | PENDING; locally only Ollama on a laptop RTX 3060 |
+| Multi-GPU | Partial: 2x T4 over PCIe, if available | `results/tensor_parallel.md` | PENDING: tensor-parallel experiment built in, needs a T4 x2 session |
+| Kubernetes, Docker, Helm | Proven on kind | Helm chart, kind e2e test | Done: chart deployed and drilled on kind (rollout, RBAC, watchdog, OOM, slow start) |
+| AWS / EKS | Not proven | stated in README | Not proven (unchanged) |
+| LLM reliability (health, recovery, restarts) | Proven on kind with a mock | watchdog, drills | Done on kind with the mock: watchdog drill, timeout-storm drill |
+| Observability (Langfuse, OTel, Prometheus, Grafana) | Proven | dashboards, traces | Done for OTel, Prometheus, Grafana; Langfuse export tested against fake endpoints only |
+| RAG, embeddings, Qdrant | Proven | eval report | Done locally (dev eval 48/52 with a 4-bit model); GPU-lab eval PENDING |
+| LangChain / LangGraph | Proven (LangGraph core, LangChain utilities) | graph code | Done |
+| SGLang, Ollama | Ollama: used. SGLang: stretch | notes | Ollama used; SGLang not attempted |
+| Redis, PostgreSQL | Proven | schema, cache metrics | Done, including failure drills |
+| CI/CD | Proven | workflows | Written and linted; the kind deployment it runs was run locally; not yet run on GitHub |
+| Production troubleshooting | Partial: induced failures only | runbooks | Induced failures only: 6 runbooks written from drills; 3 GPU runbooks PENDING |
 
 ---
 

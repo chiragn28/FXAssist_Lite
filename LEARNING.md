@@ -311,3 +311,24 @@ The first version of the rules ("circuit open for 1 minute", "timeouts above 3 p
    Weights (parameters x bytes per parameter, or the safetensors size) plus KV cache (2 x layers x KV heads x head size x bytes per token, times tokens in flight) plus activation and runtime overhead, all under `gpu_memory_utilization`. Then confirm with the server's own startup log (KV cache size, maximum concurrency at the max length) and an induced OOM to see the failure mode.
 3. *What makes a CI pipeline safe to run on pull requests from forks?*
    No secrets needed at all; `pull_request` with a read-only token, never `pull_request_target` for untrusted code; tools pinned and checksum-verified; no external paid services; everything mockable. Plus a test or lint that keeps it that way.
+
+---
+
+## Phase 8: Documentation and evidence
+
+### Concepts and decisions
+
+- **A fresh clone is the real test of "reproducible".** Cloning the repo into an empty directory and following the README (`make bootstrap`, `make install`, `cp .env.example .env`, `make demo`) worked end to end in under 3 minutes with brand-new volumes, after one fix: the PostgreSQL port was taken by a Windows program that Linux tools cannot see. Only Docker itself can tell whether it can publish a port, so `make bootstrap` now asks it, ignores ports held by FXAssist's own containers, and prints the exact `.env` change.
+
+- **Evidence beats claims, so the documents say which is which.** Every number in the interview notes, README and resume bullets is either labelled as a local development number or comes from `results/`; GPU numbers are PENDING until the Kaggle runs. The resume bullets currently contain no numbers at all, on purpose. The architecture's coverage matrix now has a dated "status today" column beside the original targets.
+
+- **Check that the design and the code still agree.** Re-reading the ADRs against the code found one gap: ADR-011 promised evaluation history in PostgreSQL, and nothing wrote it. `make eval-record` now does, and was run against a real database.
+
+- **Some problems stay open, and that is written down.** About 30% of full test runs take ~60 s longer to exit after every test has passed. Timing every exit callback and pytest hook ruled those out; the main thread is sleeping during late interpreter shutdown, probably inside a native extension. It costs CI time, not correctness, so it is recorded under CI-01 rather than hidden or "fixed" with a forced exit.
+
+### Interview questions I can now answer
+
+1. *How do you know your project actually works on someone else's machine?*
+   Clone it fresh, follow only the README, with new volumes and no local state, and fix whatever breaks in the scripts or docs rather than on the machine. Here that found a host port conflict that the prerequisite check now detects.
+2. *How do you keep a portfolio project honest?*
+   Separate targets from evidence, date the status, mark unmeasured numbers PENDING, label development numbers, and list the limits first. Every claim should point to a file: a test, a drill log, a result.
