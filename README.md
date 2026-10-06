@@ -2,7 +2,7 @@
 
 A zero-cost, self-hosted LLM platform that answers questions over public forex/CFD documentation, with citations. Built to learn and demonstrate LLMOps skills: vLLM serving and GPU tuning, RAG with Qdrant, LangGraph, observability, Kubernetes with Helm, and reliability engineering.
 
-> **Status: Phase 2 (API service) complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency. Runs locally with Docker Compose. No Kubernetes deployment or GPU results yet. See [Project status](#project-status).
+> **Status: Phase 3 (observability) complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose. No Kubernetes deployment or GPU results yet. See [Project status](#project-status).
 
 ## Honest limits
 
@@ -77,7 +77,8 @@ make demo LLM=ollama   # the same with the real local model (downloads about 2 G
 Step by step instead:
 
 ```bash
-make up             # Qdrant, Redis, PostgreSQL, gateway, mock LLM and Ollama (GPU if present)
+make up             # Qdrant, Redis, PostgreSQL, gateway, mock LLM, Ollama (GPU if present),
+                    # Prometheus (localhost:9090) and Grafana (localhost:3000)
 make pull-model     # once: downloads qwen2.5:3b-instruct (about 2 GB) into Ollama
 make ingest         # downloads the 26 documents, chunks, embeds and stores them (about 2 min)
 make ask Q="What is negative balance protection?"   # the agent directly, no API
@@ -85,12 +86,13 @@ make api-key NAME=me                                # prints a key once; active 
 curl -N localhost:8000/v1/ask -H "Authorization: Bearer fxa_..." \
      -d '{"question": "What is a margin call?"}'    # SSE: progress, then the answer
 make drill          # stops Redis, PostgreSQL and Qdrant in turn and checks the gateway
+make load           # a minute of mixed traffic: watch the Grafana dashboard move
 make test           # offline tests: no Docker, network or model needed
 make eval           # evaluation set against the local model
 make down
 ```
 
-API reference: [services/gateway/README.md](services/gateway/README.md).
+API reference: [services/gateway/README.md](services/gateway/README.md). Metrics, dashboard, alerts and tracing: [observability/README.md](observability/README.md).
 
 Example:
 
@@ -126,11 +128,11 @@ Services are published on `127.0.0.1` only, so they are not reachable from your 
 | Profile | Starts | Docker memory |
 |---|---|---|
 | lite (`make up-lite`) | data stores, gateway and mock LLM (no real model) | 4 GiB minimum |
-| default (`make up`) | lite plus Ollama, and the gateway uses it. With an NVIDIA GPU the model sits in GPU memory; on CPU it needs about 3 GB more RAM | 4 GiB with a GPU, 7 GiB without |
-| full (`make up-full`) | default plus Prometheus and Grafana (Phase 3) | 6 GiB |
+| mock (`make up-mock`) | lite plus Prometheus and Grafana, no model download | 4 GiB |
+| default (`make up`) | everything: lite plus Ollama (the gateway uses it), Prometheus and Grafana. With an NVIDIA GPU the model sits in GPU memory; on CPU it needs about 3 GB more RAM | 4 GiB with a GPU, 7 GiB without |
 | kind (Phase 4) | the whole stack inside a local Kubernetes cluster | 8 GiB |
 
-These budgets are estimates and will be replaced with measurements in Phases 3 and 4. Measured so far (2026-10-06): Qdrant 76 MiB idle and 184 MiB after the demo, PostgreSQL 32 MiB, Redis 10 MiB, gateway 347 MiB, mock LLM 44 MiB, Ollama 2.1 GiB with the 3B model.
+These budgets are estimates and will be replaced with measurements in Phases 3 and 4. Measured (2026-10-06/07): gateway 349 MiB, Grafana 217 MiB, Qdrant 94 to 184 MiB, Prometheus 59 MiB, PostgreSQL 48 MiB, mock LLM 45 MiB, Redis 13 MiB; about 825 MiB for everything except Ollama, which uses 2.1 GiB with the 3B model.
 To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconfig`, then run `wsl --shutdown`.
 
 ## Project status
@@ -140,7 +142,7 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | 0 | Scaffold, tooling, bootstrap, data-store compose, CI skeleton | Done |
 | 1 | RAG core: ingestion, Qdrant, LangGraph agent, eval set | Done |
 | 2 | FastAPI gateway, cache, rate limit, LLM adapter, mock LLM | Done |
-| 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Not started |
+| 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Done (Langfuse export configured but not tried against a real account) |
 | 4 | Containers, Helm, kind, watchdog | Not started |
 | 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Not started |
 | 6 | GPU session 1 (single T4) | Not started |

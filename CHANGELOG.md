@@ -2,6 +2,27 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Phase 3: Observability (2026-10-07)
+
+### Added
+- OpenTelemetry SDK in the gateway: Prometheus exporter on port 9464, never published (OBS-04); spans for each request (`fxassist.ask`), graph node (`agent.*`) and model call (`llm.chat`, `gen_ai.*` attributes); W3C `traceparent` sent to the model server; optional export to Langfuse Cloud or any OTLP/HTTP endpoint with a bounded queue and 2 s timeout (DEP-03).
+- Metrics: request and stage latency histograms (queue, retrieval, TTFT, LLM; OBS-05), decode tokens per second, output tokens, circuit breaker state and openings, active runs, request-log queue; label allowlist (OBS-01).
+- Log redaction of API keys, bearer/basic credentials, Langfuse keys and passwords (OBS-02); question and answer text on spans only with `FXA_TRACE_CONTENT=true`.
+- Prometheus v3.15.0 and Grafana 13.2.3 in the compose `full` profile; 9 alert rules, each naming a runbook; a 14-panel dashboard generated from `observability/grafana/build_dashboard.py` with a description and "No data" text per panel (OBS-03).
+- `make load` (mixed traffic, one key per worker, not a benchmark), `make dashboard`, `make up-mock`.
+- Runbook `llm-timeout-storm.md` from a hanging-model drill.
+- 40 new tests (288 in total).
+
+### Changed
+- `make up` now starts everything, including Prometheus and Grafana (Phase 3 acceptance). `make up-full` is gone; `make up-mock` is the full stack without Ollama. `make bootstrap` defaults to Phase 3.
+- The compose mock LLM uses the `ollama` streaming format with a 150 ms first token and 15 ms per token, so dashboards show realistic shapes.
+- Grafana memory limit 384m (measured 217 MiB at start).
+
+### Fixed during the phase
+- Alert rules for a dead model fired nothing in a 5-minute drill (cache and circuit breaker hid the failure); replaced by alerts on the model-call failure ratio and on the breaker not closing, which fired at about 2 and 3 minutes.
+- Calls refused by the open circuit breaker were counted as successful model calls.
+- FastAPI 0.142 emits its own `POST /v1/ask` span; the gateway's span was renamed `fxassist.ask`.
+
 ## Phase 2: API service (2026-10-06)
 
 ### Added

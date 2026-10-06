@@ -72,6 +72,20 @@ Plain-language definitions of every term used in this project. Extends the gloss
 - **Constant-time comparison:** comparing secrets in a way that takes the same time whether they match early or late, so timing does not leak information (`hmac.compare_digest`). *(Phase 2)*
 - **Contract test:** the same test run against the mock and the real server, to catch the mock drifting from reality. *(Phase 2)*
 
+## Observability (Phase 3)
+
+- **OpenTelemetry (OTel):** a vendor-neutral standard and SDK for metrics, traces and logs. Code uses the API; exporters send data to a backend chosen at startup. *(Phase 3)*
+- **Span / trace:** a span is one timed step (an HTTP request, a graph node, a model call); a trace is the tree of spans for one request, linked by a trace ID. *(Phase 3)*
+- **Trace context propagation (`traceparent`):** an HTTP header carrying the trace ID to the next service, so its spans join the same trace. *(Phase 3)*
+- **OTLP:** the OpenTelemetry protocol for sending telemetry, over HTTP or gRPC. Langfuse accepts OTLP over HTTP. *(Phase 3)*
+- **Scrape:** Prometheus pulling `/metrics` from a target at a fixed interval. *(Phase 3)*
+- **Counter / gauge / histogram:** a counter only goes up (requests); a gauge goes up and down (active runs); a histogram counts observations into buckets so percentiles can be computed (latency). *(Phase 3)*
+- **`rate()` / `histogram_quantile()`:** PromQL functions: per-second increase of a counter over a window; a percentile estimated from histogram buckets. *(Phase 3)*
+- **p50 / p95:** the value that 50% / 95% of observations are below. p95 shows what the slowest 1 in 20 requests experience. *(Phase 3)*
+- **Alert rule (`for:`):** a PromQL condition Prometheus evaluates regularly; `for: 2m` means it must stay true for 2 minutes before firing (pending, then firing). *(Phase 3)*
+- **Provisioning (Grafana):** loading data sources and dashboards from files at startup, so they live in git instead of being clicked together. *(Phase 3)*
+- **Langfuse:** an LLM observability service that shows traces as prompts, completions, token usage and cost. Used through its free cloud tier, optionally. *(Phase 3)*
+
 ## Developer tooling
 
 - **Lockfile (`uv.lock`):** a file recording the exact version and hash of every installed package, so every install is identical. *(Phase 0)*

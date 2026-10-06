@@ -166,3 +166,75 @@ Cautions, in order of importance:
    Put everything the answer depends on in the key: the normalised question, the corpus version, the prompt version (a hash of the prompt text) and the model identity. Changing any of them creates new keys; old ones expire. Cache only successful answers, give "I don't know" a short TTL, never cache errors, and make the cache fail open. Turn it off for benchmarks.
 3. *A user closes the browser halfway through a long generation. What happens in your system?*
    The SSE response notices the disconnect, closes its event stream, and leaves the request group. If nobody else is waiting for the same answer, the run is cancelled: the agent stops at its next step, and the adapter closes the connection to the model server at the next chunk, which makes the server stop generating. The thread slot is released when the thread really ends, so the concurrency limit stays honest. A test checks the mock sees the cancelled stream and no runs are left.
+
+---
+
+## Phase 3: Observability
+
+### Concepts and decisions
+
+- **Three signals, three jobs.** *Metrics* are numbers over time, cheap to keep and to alert on ("how many timeouts per second?"). *Traces* follow one request through every step ("where did this slow request spend its time?"). *Logs* are the detailed record of events ("what exactly failed, for request 3f2a...?"). The request ID links logs to the request log row; the trace ID links spans across services.
+
+- **OpenTelemetry is the vendor-neutral layer.** The code creates counters, histograms and spans through the OTel API. Which backend receives them (Prometheus for metrics, Langfuse or any OTLP endpoint for traces) is configured in one place, at startup. Without configuration the API calls do nothing, so the CLI and the tests pay nothing. It also meant the Phase 2 call sites did not change in Phase 3.
+
+- **Prometheus pulls, and labels are a budget.** Prometheus scrapes `/metrics` every 5 s. Every distinct combination of label values is a separate time series kept in memory, so a label like `user_id` or `question` can create millions of series and take Prometheus down (*high cardinality*). Labels here come from fixed lists (route, status, outcome, error code, stage), and a test checks real traffic against that list (OBS-01). Per-user detail belongs in logs and traces.
+
+- **Histograms, not averages.** Latency is recorded in buckets (5 ms ... 120 s). Prometheus computes percentiles from bucket counts with `histogram_quantile`. p95 shows what the slowest 1 in 20 users get; an average hides them. Bucket edges matter: a p95 can only be as precise as the buckets around it.
+
+- **Measure each stage on its own (OBS-05).** Total time mixes queueing, retrieval and generation. Time to first token is measured inside the LLM adapter, from sending the generation request to the first token, so it is not inflated by waiting for a slot or searching Qdrant. A test proves it: a 0.4 s first-token delay in the mock shows up as about 0.4 s of TTFT, while retrieval stays under 0.2 s.
+
+- **Tracing must never hurt the request (DEP-03).** Spans are queued in memory and exported by a background thread, with a 2 s timeout and a 512-span queue. If Langfuse is down, slow or returns 429, spans are dropped, not requests. Tests run requests against a refused, a rate-limited and a hanging trace backend and compare latency with a baseline. Traces also cross service boundaries: the adapter sends a W3C `traceparent` header, so a model server that traces joins the same trace.
+
+- **Alert on the dependency, not just on users.** The first set of alert rules looked sensible and stayed silent for 5 minutes while the model was completely dead (drill below). The cache kept answering popular questions, and the circuit breaker converted timeouts into fast "circuit open" errors that cycled every 30 s. The alerts that work watch the model calls themselves: the share of failed calls, and "the breaker has not closed once in 2 minutes".
+
+- **Dashboards and alerts are code.** The dashboard JSON is generated from a Python spec in which every panel has a query, a plain explanation (its tooltip) and a "No data" text that says what an empty panel means (OBS-03). Tests check that the JSON matches the spec, that every query uses a metric that exists, and that every alert names a runbook file that exists.
+
+### The dashboard, panel by panel
+
+| Panel | Query (simplified) | How to read it |
+|---|---|---|
+| Requests per second by outcome | `sum by (outcome) (rate(fxa_requests_total[1m]))` | Traffic split by what happened. `none` = rejected before the agent ran (401, 422, 429). A rise in `abstained` with steady traffic points at retrieval. |
+| Errors per second by code | `sum by (code) (rate(fxa_errors_total[1m]))` | Each code maps to one HTTP status. `rate_limited` during `make load` is the limiter working, not a fault. |
+| Fallback rate | abstained + out_of_scope / all agent outcomes | How often the agent could not answer from the documents. In the load it was about 3%. |
+| Cache hit ratio | hits / (hits + misses + skips) | Skips (Redis down) count as misses, so an outage shows as a drop. It was 89% in the load because the question pool repeats. |
+| Request latency p50 / p95 | `histogram_quantile` over `fxa_request_duration_seconds_bucket{cached="false"}` | Real answer time, with cache hits left out because they would hide it. With the mock: p50 0.85 s, p95 1.8 s. |
+| Stage latency p95 | the same, by `stage` | Where the time goes: queue, retrieval, ttft, llm. In the load: queue 5 ms, retrieval 50 ms, TTFT 0.24 s, all model calls 1.75 s. The model dominates, as expected. |
+| Generation speed | p50 of `fxa_llm_tokens_per_second` | Decode speed after the first token. The mock is set to 15 ms per token, so it shows about 70; Ollama and vLLM report real numbers. |
+| Tokens generated per second | `rate(fxa_llm_output_tokens_total[1m])` | Total output load on the model, answers vs grader. |
+| LLM calls by result | `rate(fxa_llm_calls_total[1m])` by kind and result | Every model call and how it ended. |
+| Model call failure ratio | failed calls / all calls | The signal that catches a dead model even when the cache and breaker hide it from users. |
+| Circuit breaker state | `max(fxa_llm_circuit_state)` | 0 closed, 1 half-open, 2 open. Flipping between 1 and 2 means trial calls keep failing. |
+| Agent runs in progress | `fxa_agent_runs_active` | Worker threads busy. At the limit (4), new requests queue. |
+| Context truncations and coalesced requests | rates of both counters | Truncations: excerpts dropped to fit the context window (RET-06). Coalesced: requests that shared another's answer (API-04). Usually "No data", which is fine. |
+| Dependency failures and degraded modes | Redis/PostgreSQL/Qdrant failures, local rate limiting, dropped log rows | All zero in normal operation; anything here means a fallback is active. |
+
+### Drill: the model hangs (2026-10-07)
+
+Compose stack with the mock set to accept requests and never answer, `make load` with 3 workers. Timeline from Prometheus, sampled every 15 s:
+
+| Time after the model died | What happened |
+|---|---|
+| 0 to 30 s | Requests needing the model wait 30 s, then 504. Cached questions are still answered. |
+| ~1 min | 5 consecutive failures: circuit breaker opens; requests get 503 in milliseconds. |
+| every 30 s | Breaker goes half-open, one trial call, times out, opens again. |
+| ~2 min 15 s | **FxaLLMFailing** fires. |
+| ~3 min | **FxaLLMCircuitNotClosing** fires. |
+| model healed | First request answered within 10 s (the half-open trial), breaker closed, both alerts resolved within 43 s, no restart. |
+
+The first version of the rules ("circuit open for 1 minute", "timeouts above 3 per minute", "5xx above 5% of requests") fired **nothing** in the same 5 minutes. The drill also found a bug: calls refused by the open breaker were counted as successful model calls. Both are fixed, with a regression test, and the runbook `docs/runbooks/llm-timeout-storm.md` records the whole timeline.
+
+### Measured locally (development numbers, not results)
+
+| What | Value |
+|---|---|
+| Memory, whole compose stack without Ollama (`make up-mock`, after load) | gateway 349 MiB, Grafana 217 MiB, Qdrant 94 MiB, Prometheus 59 MiB, PostgreSQL 48 MiB, mock 45 MiB, Redis 13 MiB |
+| 5-minute hanging-model drill | 746 requests: 365 answered (almost all from the cache), 9 timeouts (504), 10 fast circuit-open 503s, the rest rate-limited or guard outcomes |
+
+### Interview questions I can now answer
+
+1. *What is metric cardinality and how do you keep it under control?*
+   The number of distinct label combinations, each of which is a separate time series in Prometheus's memory. Keep labels to small fixed sets (status, route template, error code), never user IDs, prompts or request IDs; put those in logs and traces. Enforce it with an allowlist and a test that checks the labels real traffic produces.
+2. *How would you measure time to first token correctly in a RAG service?*
+   Measure it where the model call happens: from sending the generation request to the first content token, with streaming on. Record queue time, retrieval time and total time as separate histograms, so a slow total can be attributed. Prove it with a test that injects a known first-token delay and checks only TTFT moves.
+3. *Your LLM backend died but no alert fired. Why could that happen, and what would you alert on?*
+   Caching and circuit breakers protect users and hide the failure from user-facing metrics: cached answers keep succeeding, and the breaker turns slow timeouts into fast, intermittent errors that "open for N minutes" rules miss because of half-open trials. Alert on the dependency itself: the failure ratio of model calls, and "the breaker has not closed in N minutes". Then drill it: break the model on purpose and check that the alert fires.
