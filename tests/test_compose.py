@@ -1,0 +1,82 @@
+"""Static checks on deploy/compose/compose.yaml (ENV-02, ENV-04, OBS-04, SAF-08, DEP-04)."""
+
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+COMPOSE = yaml.safe_load((ROOT / "deploy/compose/compose.yaml").read_text())
+SERVICES = COMPOSE["services"]
+
+# ENV-02: documented minimum Docker memory for the lite profile (README, bootstrap.sh).
+LITE_BUDGET_MIB = 4 * 1024
+# Headroom for the gateway, agent and embedding model that join the lite set in Phase 2.
+APP_RESERVE_MIB = 2 * 1024
+
+PORT_RE = re.compile(r"^\$\{FXA_BIND_ADDR:-127\.0\.0\.1\}:\$\{FXA_[A-Z_]+_PORT:-\d+\}:\d+$")
+
+
+def to_mib(limit: str) -> int:
+    number, unit = re.fullmatch(r"(\d+)([mg])", limit.lower()).groups()
+    return int(number) * (1024 if unit == "g" else 1)
+
+
+@pytest.mark.parametrize("name", SERVICES)
+def test_env04_ports_come_from_env(name: str) -> None:
+    """ENV-04: every host port is overridable, and bound to localhost by default (OBS-04)."""
+    for mapping in SERVICES[name].get("ports", []):
+        assert PORT_RE.match(mapping), f"{name}: {mapping!r} must use FXA_* port and bind vars"
+
+
+def test_env04_every_variable_is_documented() -> None:
+    """ENV-04: each FXA_* variable used by compose is listed in .env.example."""
+    used = set(re.findall(r"\$\{(FXA_[A-Z_]+)", (ROOT / "deploy/compose/compose.yaml").read_text()))
+    documented = set(re.findall(r"^(FXA_[A-Z_]+)=", (ROOT / ".env.example").read_text(), re.M))
+    assert used - documented == set()
+
+
+def test_env04_default_ports_are_unique() -> None:
+    defaults = re.findall(r"_PORT:-(\d+)\}", (ROOT / "deploy/compose/compose.yaml").read_text())
+    assert len(defaults) == len(set(defaults))
+
+
+@pytest.mark.parametrize("name", SERVICES)
+def test_env02_memory_limit_set(name: str) -> None:
+    """ENV-02: without limits the RAM budget is unknowable."""
+    assert "mem_limit" in SERVICES[name], f"{name} has no mem_limit"
+
+
+def test_env02_lite_profile_fits_budget() -> None:
+    """ENV-02: services with no profile form the lite set and must fit the documented minimum."""
+    lite = [s for s in SERVICES.values() if not s.get("profiles")]
+    total = sum(to_mib(s["mem_limit"]) for s in lite)
+    assert total + APP_RESERVE_MIB <= LITE_BUDGET_MIB, f"lite set uses {total} MiB"
+
+
+@pytest.mark.parametrize("name", SERVICES)
+def test_saf08_runs_as_non_root(name: str) -> None:
+    """SAF-08 / rule 8: containers run as a non-root user without extra capabilities."""
+    service = SERVICES[name]
+    user = str(service.get("user", ""))
+    assert user and not user.startswith(("0", "root")), f"{name} must set a non-root user"
+    assert "ALL" in service.get("cap_drop", [])
+    assert "no-new-privileges:true" in service.get("security_opt", [])
+
+
+@pytest.mark.parametrize("name", SERVICES)
+def test_images_pinned_to_exact_version(name: str) -> None:
+    """Rule 3: no floating tags; every version is recorded in docs/VERSIONS.md."""
+    image = SERVICES[name]["image"]
+    repo, _, tag = image.rpartition(":")
+    # PostgreSQL releases are major.minor since v10, so "18.6" is already an exact release.
+    pattern = r"\d+\.\d+$" if repo == "postgres" else r"v?\d+\.\d+\.\d+"
+    assert re.match(pattern, tag), f"{name}: {image} is not pinned to an exact release"
+    assert image in (ROOT / "docs/VERSIONS.md").read_text(), f"{image} missing from VERSIONS.md"
+
+
+@pytest.mark.parametrize("name", SERVICES)
+def test_dep04_healthcheck_defined(name: str) -> None:
+    """DEP-04 groundwork: `docker compose up --wait` can only gate on services with healthchecks."""
+    assert "healthcheck" in SERVICES[name]
