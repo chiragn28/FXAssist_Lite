@@ -1,0 +1,51 @@
+# --- Secrets (SAF-07). Real values live only in .env, never in git. ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig*
+hf_token*
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Data (DAT-08). Raw documents may not be redistributable: only URLs and the
+# fetch script are committed, see data/SOURCES.md. ---
+data/raw/
+data/processed/
+data/cache/
+data/reports/
+
+# --- Model weights and caches: never committed. ---
+*.safetensors
+*.gguf
+*.bin
+*.onnx
+models/
+.cache/
+hf_cache/
+
+# --- Local runtime state ---
+qdrant_storage/
+*.log
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -180,6 +180,14 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 ### ADR-020: Documentation is a deliverable
 - **Decision:** the repo must contain the full document set listed in the Claude Code prompt, kept in sync with the code. Each phase ends with a `LEARNING.md` update so I understand what was built.
 
+### ADR-021: uv manages Python versions and the dependency lockfile
+- **Status:** accepted in Phase 0 (2026-10-06). New decision; no earlier ADR covered tooling.
+- **Plain meaning:** one tool installs the right Python, creates the virtual environment and writes a lockfile with the exact version and hash of every package, so my laptop, CI and Docker images all install the same thing.
+- **Context:** the build contract asks for a pinned dependency lockfile and Python 3.11+. The repo will hold several services (gateway, agent, mock LLM, watchdog) that each need their own small dependency set for lean images.
+- **Options:** (a) pip plus pip-tools `requirements.txt` files; (b) Poetry; (c) uv.
+- **Decision:** (c) uv. It can install Python 3.11 itself, `uv lock --check` gives CI a one-line lockfile drift check (CI-03), and uv workspaces give each service its own `pyproject.toml` while sharing one `uv.lock`.
+- **Consequences:** contributors need uv (`make bootstrap` checks for it and prints the install command). The repo root is a virtual workspace (`package = false`); services become workspace members from Phase 1. Dockerfiles in Phase 4 install from `uv.lock` with `uv sync --locked`.
+
 ---
 
 ## 4. Cost model

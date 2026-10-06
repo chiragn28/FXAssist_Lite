@@ -1,0 +1,34 @@
+# Installed by `make install`. Runs on every `git commit`.
+# Revisions verified against each repo's latest release on 2026-10-06 (see docs/VERSIONS.md).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending # ENV-01
+        args: [--fix=lf]
+      - id: check-added-large-files # DAT-08: stops raw documents and model files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key # SAF-07
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # SAF-07: secret scanning of staged changes. This hook only sees what is staged,
+  # so CI and `make secrets-scan` also scan the full git history.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

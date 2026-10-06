@@ -1,0 +1,58 @@
+# Phase 0 CI: the minimum needed for SAF-07 (secret scan in CI) and ENV-05 (bootstrap on a
+# clean machine). Phase 5 extends this with image builds, Helm and the kind integration test.
+# No secrets, no GPU, no paid API (CI-02, CI-05), so pull requests from forks pass too.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks scans every commit, not just the latest
+
+      - uses: astral-sh/setup-uv@v10
+
+      - name: Bootstrap check on a clean runner (ENV-05)
+        run: make bootstrap
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Lockfile is up to date (CI-03)
+        run: uv lock --check
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Secret scan of full history (SAF-07)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "${base}/${tarball}"
+          curl -fsSLO "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " ${tarball}\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum --check
+          tar -xzf "${tarball}" gitleaks
+          ./gitleaks git . --redact --verbose
+
+      - name: Compose file is valid
+        run: docker compose --project-directory . -f deploy/compose/compose.yaml --env-file .env.example config --quiet

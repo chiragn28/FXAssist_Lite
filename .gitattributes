@@ -1,0 +1,23 @@
+# ENV-01: force LF line endings for every text file.
+# Without this, a checkout on Windows with core.autocrlf=true turns scripts into CRLF,
+# and bash then fails with "$'\r': command not found".
+* text=auto eol=lf
+
+# Be explicit for the files that break hardest on CRLF.
+*.sh        text eol=lf
+Makefile    text eol=lf
+*.mk        text eol=lf
+*.py        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.toml      text eol=lf
+*.ipynb     text eol=lf
+Dockerfile* text eol=lf
+
+# Binary files: never touch.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary
+*.parquet binary
