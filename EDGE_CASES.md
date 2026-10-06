@@ -160,15 +160,15 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | SAF-04 | Prompt injection in user input | System instructions hold; test set of 10 attacks | adversarial set | TODO |
 | SAF-05 | Request to reveal system prompt or keys | Refused | fixture | TODO |
 | SAF-06 | Every answer must be framed as informational | Standard disclaimer added by the gateway, not by the model | test | TODO |
-| SAF-07 | Secrets committed to git | Pre-commit secret scan and CI scan | scan job | TODO |
-| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | TODO |
+| SAF-07 | Secrets committed to git | Pre-commit secret scan and CI scan | scan job | DONE (pre-commit gitleaks: test_saf07_precommit_runs_gitleaks; CI full-history scan: test_saf07_ci_scans_full_history; manual: planted token caught). First real CI run pending a push to GitHub |
+| SAF-08 | Container runs as root or image has known vulnerabilities | Non-root user; vulnerability scan with a free scanner reported, not blocking | CI | TODO: partial. Done: compose services non-root with all capabilities dropped (test_saf08_runs_as_non_root). Left: our own images (Phase 4), vulnerability scan (Phase 5) |
 
 ## ENV: Developer environment
 
 | ID | Scenario | Expected | Test | Status |
 |---|---|---|---|---|
-| ENV-01 | Windows line endings break shell scripts | `.gitattributes` forces LF for scripts | fresh-clone test | TODO |
-| ENV-02 | Docker Desktop memory too low for the full stack | Documented minimum; a "lite" compose profile for lower-RAM machines | check | TODO |
+| ENV-01 | Windows line endings break shell scripts | `.gitattributes` forces LF for scripts | fresh-clone test | DONE (test_env01_gitattributes_forces_lf, test_env01_no_crlf_in_tracked_text_files; bootstrap also checks the checkout) |
+| ENV-02 | Docker Desktop memory too low for the full stack | Documented minimum; a "lite" compose profile for lower-RAM machines | check | TODO: partial. Done: bootstrap memory check, minimums in README, test_env02_memory_limit_set, test_env02_lite_profile_fits_budget. Left: the `full` profile has nothing in it until Phase 3 |
 | ENV-03 | Ollama not running or model not pulled | Clear startup error with the exact fix command | test | TODO |
-| ENV-04 | Port conflicts on the host | Ports configurable by environment variables | test | TODO |
-| ENV-05 | Fresh clone doesn't work | `make bootstrap` followed by `make demo` works on a clean machine; verified in CI where possible | clean clone test | TODO |
+| ENV-04 | Port conflicts on the host | Ports configurable by environment variables | test | DONE (test_env04_ports_come_from_env, test_env04_every_variable_is_documented; manual 2026-10-06: host Postgres held 5432, FXA_POSTGRES_PORT=55432 worked) |
+| ENV-05 | Fresh clone doesn't work | `make bootstrap` followed by `make demo` works on a clean machine; verified in CI where possible | clean clone test | TODO: partial. Done: `make bootstrap` (tests/test_bootstrap.py, CI step on a clean runner). Left: `make demo` (Phase 2 onwards, fresh-clone test in Phase 8) |
