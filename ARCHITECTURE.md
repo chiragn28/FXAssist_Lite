@@ -18,7 +18,7 @@ Status: design v1. When a decision changes, add a new ADR and mark the old one "
 - Everything must be reproducible from the repo (scripts, not memory).
 - Runs on my Windows laptop (use WSL2) plus a free GPU notebook.
 
-**Non-goals:** production hardening, large models (13B+), fine-tuning, multi-region, real users, real money decisions.
+**Non-goals:** production hardening, large models (13B+), multi-region, real users, real money decisions. (Fine-tuning was a non-goal until ADR-026 added one small, measured LoRA experiment.)
 
 **Honest limits of this project (say these in interviews):**
 - GPU work happens on free T4 GPUs in a notebook, not on Kubernetes.
@@ -219,6 +219,23 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 - **Options:** (a) query PostgreSQL per request; (b) per-key cache filled on first use; (c) full snapshot refreshed on a timer.
 - **Decision:** (c). Keys are `fxa_<id>_<secret>`; only the id and a SHA-256 of the whole key are stored. A fast hash is enough because keys are 256-bit random values (slow hashes protect guessable human passwords). Comparison uses `hmac.compare_digest`, and unknown ids are compared against a dummy hash, so response timing does not reveal which ids exist.
 - **Consequences:** a new or revoked key takes effect within one refresh interval (`FXA_KEY_REFRESH_S`, 30 s). The gateway cannot authenticate anyone until its first successful load, so it reports not-ready until then (DEP-04). The table is expected to stay small (hundreds of keys, not millions).
+
+
+### ADR-026: One LoRA fine-tune, with data filtered by the agent's own validator
+- **Status:** accepted 2026-10-07 (approved by the user). Changes the non-goals in section 1; ADR-005 is unchanged (the base model still serves by default).
+- **Plain meaning:** teach the small model to answer the way this system needs (cite exactly, copy the right number, say INSUFFICIENT_CONTEXT only when the excerpts really lack the answer), using examples that a bigger free model wrote and our own checks approved.
+- **Context:** the GPU evaluation showed retrieval at 22/22 but 6 (FP16) and 9 (AWQ) of 22 answerable questions abstained, plus one garbled citation ("a limit of [S1]"). The failures are in generation, which fine-tuning targets; retrieval and safety are already at 100% and must not regress.
+- **Options:** (a) prompt changes only (one was tried and reverted: it made citations worse, LEARNING.md Phase 1); (b) LoRA on examples written by a larger open model, filtered by the validator; (c) full fine-tuning; (d) a paid API as the teacher or judge.
+- **Decision:** (b). Teacher: Qwen2.5-7B-Instruct-AWQ (Apache-2.0) on vLLM, run **through the real agent** so prompts match inference exactly; only runs whose answer passes the citation and number checks are kept; 15% "excerpts do not answer this" examples; questions within cosine 0.80 of any evaluation question are dropped. LoRA r=16 on all projection layers of Qwen2.5-3B-Instruct, float16 base with float32 adapter weights (T4), time-limited, merged into a full float16 model served by the same vLLM. Evaluated with the unchanged evaluation set, base model re-run in the same session.
+- **Consequences:** one Kaggle run of about 1.5 GPU hours (`make ft-push`). Training data never leaves Kaggle scratch (it holds document excerpts); the adapter, logs and reports are kept. The student inherits the Qwen Research License (non-commercial). 52 evaluation items cannot show small gains: a result within two or three items of the base is "no measurable difference". (c) does not fit a T4; (d) breaks the $0 rule.
+
+### ADR-027: A web page for asking questions, with text read from images by local OCR
+- **Status:** accepted 2026-10-07 (approved by the user).
+- **Plain meaning:** a simple chat page served by the gateway itself. Users can attach a screenshot (for example a broker's terms); the text in it is read on the server and added to the question as clearly marked, untrusted text. The answer still comes only from the regulator documents, with citations.
+- **Context:** the system only had an API, a CLI and Grafana. The model reads text only (ADR-005), so images need a text step or a different model.
+- **Options:** (a) a separate frontend app (React, a build step, its own image); (b) a static page served by the gateway, plain HTML and JavaScript; (c) a vision-language model for images; (d) OCR on the server.
+- **Decision:** (b) and (d). The page uses the existing API (SSE stream, API key in the browser's session storage). OCR runs in the gateway on the CPU; extracted text goes through the same guard as typed questions (injection checks, length limit) and is wrapped as untrusted data.
+- **Consequences:** no new service and no build step. OCR adds an OCR engine to the gateway image (size budget re-checked) and a size, type and pixel limit on uploads. Text in an image can carry prompt injection like any other input, so it gets exactly the same checks. Charts and photos without text add nothing: the page says so instead of guessing.
 
 ---
 

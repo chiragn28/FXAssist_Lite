@@ -14,6 +14,8 @@
 #   REPO_URL               repo the notebook clones (default: the `github` git remote)
 #   FXA_KAGGLE_MACHINE     NvidiaTeslaT4 = GPU T4 x2 (default). Use "" for Kaggle's default GPU.
 #   FXA_KAGGLE_SLUG        kernel name (default fxassist-gpu-lab)
+#   FXA_KAGGLE_NOTEBOOK    notebook in notebooks/ without .ipynb (default fxassist_gpu_lab;
+#                          fxassist_finetune for the LoRA run, ADR-026)
 #   FXA_LAB_MAX_PRIORITY, FXA_LAB_RUN_EVAL, FXA_LAB_RUN_OOM_DRILL
 #                          override the notebook parameters of the same name, e.g. an eval-only
 #                          rerun: FXA_LAB_MAX_PRIORITY=0 FXA_LAB_RUN_OOM_DRILL=False make lab-push
@@ -24,6 +26,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KAGGLE_CLI_VERSION="2.2.4"  # verified on PyPI 2026-10-07 (docs/VERSIONS.md)
 KAGGLE=(uvx --quiet --from "kaggle==${KAGGLE_CLI_VERSION}" kaggle)
 SLUG="${FXA_KAGGLE_SLUG:-fxassist-gpu-lab}"
+NOTEBOOK="${FXA_KAGGLE_NOTEBOOK:-fxassist_gpu_lab}"
 MACHINE="${FXA_KAGGLE_MACHINE-NvidiaTeslaT4}"
 BUILD="$ROOT/.kaggle-kernel"
 
@@ -69,7 +72,7 @@ cmd_push() {
         echo "warning: the notebook clones $repo, which may not have your latest local commits." >&2
     fi
     rm -rf "$BUILD" && mkdir -p "$BUILD"
-    python3 - "$ROOT/notebooks/fxassist_gpu_lab.ipynb" "$BUILD/fxassist_gpu_lab.ipynb" "$repo" <<'PY'
+    python3 - "$ROOT/notebooks/$NOTEBOOK.ipynb" "$BUILD/$NOTEBOOK.ipynb" "$repo" <<'PY'
 import json, os, re, sys
 src, dst, repo = sys.argv[1:]
 nb = json.load(open(src))
@@ -100,13 +103,13 @@ if bad:
 print("notebook parameters:", ", ".join(f"{k}={v}" for k, v in params.items()))
 json.dump(nb, open(dst, "w"), indent=1)
 PY
-    python3 - "$BUILD/kernel-metadata.json" "$(kernel_id)" "$MACHINE" <<'PY'
+    python3 - "$BUILD/kernel-metadata.json" "$(kernel_id)" "$MACHINE" "$SLUG" "$NOTEBOOK" <<'PY'
 import json, sys
-path, kid, machine = sys.argv[1:]
+path, kid, machine, slug, notebook = sys.argv[1:]
 meta = {
     "id": kid,
-    "title": "fxassist-gpu-lab",
-    "code_file": "fxassist_gpu_lab.ipynb",
+    "title": slug,
+    "code_file": f"{notebook}.ipynb",
     "language": "python",
     "kernel_type": "notebook",
     "is_private": True,
@@ -122,7 +125,7 @@ json.dump(meta, open(path, "w"), indent=2)
 PY
     echo "pushing $(kernel_id) (GPU ${MACHINE:-default}, Internet on, private), cloning $repo"
     "${KAGGLE[@]}" kernels push -p "$BUILD"
-    echo "Started. Check with: make lab-status   (the run takes about 4 to 5 hours)"
+    echo "Started. Check its status with FXA_KAGGLE_SLUG=$SLUG (make lab-status or make ft-status)"
 }
 
 cmd_status() {

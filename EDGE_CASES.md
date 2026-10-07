@@ -150,6 +150,15 @@ How to read a row: **Scenario** is what goes wrong, **Expected** is the required
 | BEN-08 | Output length varies, so tokens per second misleads | Fix max output tokens; report generated token counts | harness | DONE (max_tokens 128 plus vLLM's ignore_eos, token counts from usage; smoke test checks exact length; test_ben01_ben08_cell_row_records_fixed_output_and_discards_warmup) |
 | BEN-09 | Unfair comparison FP16 vs AWQ | Same model, same prompts, same settings, separate runs | review | DONE (test_ben09_fp16_and_awq_differ_only_in_the_model: same cells and settings, separate servers) |
 
+## FT: Fine-tuning (ADR-026)
+
+| ID | Scenario | Expected | Test | Status |
+|---|---|---|---|---|
+| FT-01 | Training questions overlap the evaluation set, so the score is inflated | Generated questions within cosine 0.80 of any evaluation or attack question are dropped, and the count is reported | unit test + data report | DONE (test_ft01_questions_close_to_eval_questions_are_dropped; `data-report.json` lists the drops) |
+| FT-02 | The teacher's answers are wrong or badly cited, and the student learns the errors | Only agent runs whose final answer passed the citation and number checks become examples; the target is the validated text | unit test + data report | DONE (test_ft02_teacher_question_parsing_tolerates_fences_and_rejects_nulls; kept/rejected counts in `data-report.json`) |
+| FT-03 | Training only on answered questions teaches the model to always answer | 15% "excerpts do not answer this" examples (other question's excerpts, different sources) with INSUFFICIENT_CONTEXT as the target; abstention accuracy and safety re-measured | unit test + eval | DONE (test_ft03_negative_example_keeps_the_excerpts_and_swaps_the_question). Eval result: PENDING (Kaggle run) |
+| FT-04 | Training on a T4 fails: no bfloat16, fp16 overflow or underflow, too slow | float16 base, float32 adapter weights, loss scaling, gradient checkpointing, a time limit; served with the same float16 vLLM settings | local run on a laptop GPU (0.5B model) + Kaggle run | DONE (harness: test_ft04_finetuned_model_is_served_like_the_fp16_baseline; local training run 2026-10-07 on an RTX 3060 with Qwen2.5-0.5B: trains, validates, merges). T4 run: PENDING |
+
 ## SAF: Safety, security and domain
 
 | ID | Scenario | Expected | Test | Status |

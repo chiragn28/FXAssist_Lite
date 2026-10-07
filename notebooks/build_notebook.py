@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build notebooks/fxassist_gpu_lab.ipynb (run `make notebook` after editing).
+"""Build notebooks/fxassist_gpu_lab.ipynb and fxassist_finetune.ipynb (`make notebook`).
 
 The notebook is thin on purpose: parameters, then one call per stage into bench/lab.py, which is
 tested in mock mode (bench/tests). Edit this file, not the .ipynb.
@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent / "fxassist_gpu_lab.ipynb"
+FT_OUT = Path(__file__).resolve().parent / "fxassist_finetune.ipynb"
 
 CELLS: list[tuple[str, str]] = [
     (
@@ -134,9 +135,65 @@ make report RUN=results/raw/$(date +%Y%m%d)/fxassist_results
 ]
 
 
-def build() -> dict:
+# The fine-tuning run (ADR-026): same checkout and secrets cells, then bench/finetune.py.
+FT_CELLS: list[tuple[str, str]] = [
+    (
+        "markdown",
+        """# FXAssist Lite: LoRA fine-tuning (Kaggle T4)
+
+A larger open model (**Qwen2.5-7B-Instruct-AWQ**, Apache-2.0) answers questions written from the corpus **through the real agent**; only answers that pass the agent's own citation and number checks become training data. Then a time-limited **LoRA** fine-tune of **Qwen2.5-3B-Instruct** (float16, one T4), merged and evaluated with the same evaluation set as the base model, in the same session. ADR-026, `docs/FINETUNING.md`.
+
+Run with `make ft-push`. About 1.5 hours of GPU time. Training data stays in scratch (it contains document excerpts); reports, logs and the LoRA adapter are downloaded.""",
+    ),
+    (
+        "code",
+        """# Parameters
+import os
+from pathlib import Path
+
+REPO_URL = "https://github.com/<you>/fxassist_lite"  # your public copy of the repo
+HOUR_BUDGET = 2.0     # the base-model evaluation is skipped if this runs out (GPU-06)
+CHUNKS = 450          # corpus chunks the teacher writes questions from
+TRAIN_MINUTES = 30    # LoRA training stops cleanly after this (FT-04)
+
+MODE = "kaggle" if Path("/kaggle").exists() else "colab" if Path("/content").exists() else "mock"
+print("mode:", MODE)""",
+    ),
+    CELLS[2],
+    CELLS[3],
+    ("markdown", "## 1. Environment checks"),
+    (
+        "code",
+        """from bench import finetune, lab
+cfg = lab.LabConfig.for_mode(MODE, hour_budget=HOUR_BUDGET)
+env = lab.check_environment(cfg)
+print({k: env[k] for k in ("gpus", "bf16_supported", "internet", "scratch_free_gb")})
+if env["problems"]:
+    raise SystemExit("Fix first:\\n- " + "\\n- ".join(env["problems"]))
+lab.install_vllm(cfg)""",
+    ),
+    ("markdown", "## 2. Training data: teacher + real agent + validator (FT-01, FT-02, FT-03)"),
+    ("code", """finetune.make_data(cfg, REPO_DIR, CHUNKS)"""),
+    ("markdown", "## 3. LoRA fine-tune, then merge (FT-04)"),
+    ("code", """finetune.train(cfg, REPO_DIR, TRAIN_MINUTES)"""),
+    ("markdown", "## 4. Evaluation: fine-tuned model, then the base model, same session"),
+    (
+        "code",
+        """for row in finetune.evaluate(cfg, REPO_DIR):
+    print(row)""",
+    ),
+    ("markdown", "## 5. Package"),
+    (
+        "code",
+        """zip_path = lab.package(cfg)
+print("Download:", zip_path, f"({cfg.hours_left:.2f} budget hours left)")""",
+    ),
+]
+
+
+def build(source_cells: list[tuple[str, str]] | None = None) -> dict:
     cells = []
-    for kind, source in CELLS:
+    for kind, source in CELLS if source_cells is None else source_cells:
         cell = {"cell_type": kind, "metadata": {}, "source": source.splitlines(keepends=True)}
         if kind == "code":
             cell |= {"execution_count": None, "outputs": []}
@@ -154,8 +211,9 @@ def build() -> dict:
 
 
 def main() -> None:
-    OUT.write_text(json.dumps(build(), indent=1) + "\n")
-    print(f"wrote {OUT}")
+    for path, cells in ((OUT, CELLS), (FT_OUT, FT_CELLS)):
+        path.write_text(json.dumps(build(cells), indent=1) + "\n")
+        print(f"wrote {path}")
 
 
 if __name__ == "__main__":

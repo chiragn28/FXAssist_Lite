@@ -250,6 +250,15 @@ lab-status: ## Show the Kaggle GPU-lab run status
 lab-pull: ## Download the Kaggle GPU-lab output into results/raw/<date>/
 	@bash scripts/kaggle_lab.sh pull
 
+ft-push: ## Start the LoRA fine-tuning run on Kaggle (ADR-026, about 1.5 GPU hours)
+	@FXA_KAGGLE_SLUG=fxassist-finetune FXA_KAGGLE_NOTEBOOK=fxassist_finetune bash scripts/kaggle_lab.sh push
+
+ft-status: ## Show the Kaggle fine-tuning run status
+	@FXA_KAGGLE_SLUG=fxassist-finetune bash scripts/kaggle_lab.sh status
+
+ft-pull: ## Download the fine-tuning run output into results/raw/<date>/
+	@FXA_KAGGLE_SLUG=fxassist-finetune bash scripts/kaggle_lab.sh pull
+
 ##@ Demo
 demo: LLM ?= mock
 demo: ## End-to-end demo: stack, ingest, key, questions (LLM=ollama for the real model)

@@ -593,18 +593,27 @@ def oom_drill(cfg: LabConfig) -> dict[str, Any]:
 # --- 9. Evaluation with the real model (ADR-016) -----------------------------------------------
 
 
-def run_eval(cfg: LabConfig, variant: str, repo_dir: Path) -> dict[str, Any]:
-    """`fxassist ingest` + `fxassist eval` against vLLM, with Qdrant in embedded mode (ADR-008)."""
+LOCAL_MODEL_PREFIX = "local/"  # models built in the lab (ADR-026), never downloaded
+
+
+def run_eval(
+    cfg: LabConfig, variant: str, repo_dir: Path, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """`fxassist ingest` + `fxassist eval` against vLLM, with Qdrant in embedded mode (ADR-008).
+
+    `config` overrides the server settings, e.g. for a fine-tuned model built in the lab."""
     if cfg.mode == "mock":
         return record(
             cfg, f"eval {variant}", "skipped", note="mock mode: needs the real corpus and model"
         )
     python = make_venv(cfg, "eval-venv", ["-e", str(repo_dir / "services" / "agent")])
-    config = next(
-        e for e in EXPERIMENTS if e.name == "baseline" and e.variant == variant
-    ).server_config
+    if config is None:
+        config = next(
+            e for e in EXPERIMENTS if e.name == "baseline" and e.variant == variant
+        ).server_config
     server = Server(cfg, config, f"eval-{variant}")
-    download_model(cfg, config["model"])
+    if not config["model"].startswith(LOCAL_MODEL_PREFIX):
+        download_model(cfg, config["model"])
     server.start()
     ok, why = server.wait_ready(cfg.server_start_timeout_s)
     if not ok:
