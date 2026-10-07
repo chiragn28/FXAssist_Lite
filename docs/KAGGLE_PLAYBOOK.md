@@ -17,10 +17,11 @@ How to run `notebooks/fxassist_gpu_lab.ipynb` on a free Kaggle T4 (or Colab), wh
 | Qwen/Qwen2.5-3B-Instruct-AWQ: not gated, 2.69 GB, 4-bit AWQ GEMM, group size 128, Qwen Research License | **Verified** | huggingface.co API, config.json |
 | Qwen/Qwen2.5-7B-Instruct-AWQ (stretch): 5.57 GB, Apache-2.0 | **Verified** | huggingface.co API |
 | Kaggle weekly GPU quota "about 30 hours", sometimes more | **Unverified** | Only secondary sources (Kaggle's own pages render client-side and could not be read). Check *your* number at kaggle.com > Settings, or the quota bar in the notebook editor, and write it here |
-| Kaggle GPU choices: P100 (16 GB) or 2x T4 (2 x 15 GB) | **Unverified** | secondary sources; check the Accelerator menu |
+| `machine_shape: NvidiaTeslaT4` gives **2 x Tesla T4**, 15,360 MiB each, compute capability 7.5, no BF16; 4 CPUs | **Verified** | `environment.json` of the first run, 2026-10-07 |
 | Kaggle session limit 12 hours; idle sessions stop sooner | **Unverified** | secondary sources. The lab is resumable regardless |
-| Internet in a Kaggle notebook needs a phone-verified account | **Unverified** | secondary sources; the environment cell detects missing internet and says what to do (GPU-09) |
-| Kaggle disk: `/kaggle/working` (output, kept and downloadable, small quota) vs `/kaggle/tmp` (large, discarded) | **Unverified** | common knowledge, not re-checked: the lab writes only small result files to `/kaggle/working` and puts weights and virtualenvs in `/kaggle/tmp`; the environment cell measures free space (GPU-10) |
+| Internet in a Kaggle notebook needs a phone-verified account | **Unverified** (requirement) / **Verified** (internet worked for this account, 2026-10-07) | secondary sources; the environment cell detects missing internet and says what to do (GPU-09) |
+| Kaggle disk: `/kaggle/working` (output, kept and downloadable, small quota) vs `/kaggle/tmp` (large, discarded) | **Partly verified**: `/kaggle/tmp` had 1,148.8 GB free on 2026-10-07; the `/kaggle/working` quota is unverified | `environment.json` of the first run. The lab writes only small result files to `/kaggle/working` and puts weights and virtualenvs in `/kaggle/tmp` (GPU-10) |
+| Kaggle image Python is **3.13.15** and `python -m venv` fails (`ensurepip` exit status 1) | **Verified** | first run, 2026-10-07; the lab now creates virtualenvs with uv (GPU-04) |
 | Colab free tier: T4 availability varies, sessions disconnect when idle | **Unverified** | the notebook detects Colab and uses `/content` paths and `google.colab.userdata` secrets (GPU-12) |
 
 When you run the notebook, its first stage writes `environment.json` with what you actually got (GPU names and count, compute capability, free disk, internet). Copy those facts into this table with the date.

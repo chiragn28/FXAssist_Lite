@@ -350,3 +350,20 @@ def test_dep06_download_retries_resumes_and_fails_with_the_fix(tmp_path, monkeyp
     )
     with pytest.raises(RuntimeError, match="Internet is on.*resumes them"):
         lab.download_model(cfg, "Qwen/Qwen2.5-3B-Instruct", attempts=2)
+
+
+def test_run_sync_works_inside_a_running_event_loop() -> None:
+    """Kaggle runs notebooks with an event loop already running (second Kaggle run, 2026-10-07)."""
+    import asyncio
+
+    from bench.harness import run_sync
+
+    async def answer() -> int:
+        await asyncio.sleep(0)
+        return 42
+
+    async def notebook_cell() -> int:  # like code in a Jupyter cell: a loop is running
+        return run_sync(answer())
+
+    assert run_sync(answer()) == 42  # plain script
+    assert asyncio.run(notebook_cell()) == 42  # inside a running loop

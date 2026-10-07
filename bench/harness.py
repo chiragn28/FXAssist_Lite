@@ -18,19 +18,23 @@ without trusting anyone's memory.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import math
 import os
 import platform
 import statistics
 import time
+from collections.abc import Coroutine
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
 from .prompts import PromptSet
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -209,6 +213,21 @@ class ResultLog:
         self.done.add(f"{row['cell_key']}|rep{row['repetition']}")
 
 
+def run_sync(coro: Coroutine[Any, Any, T]) -> T:
+    """Run a coroutine to completion from synchronous code, even inside a notebook.
+
+    Jupyter (and papermill on Kaggle) already runs an event loop in the main thread, where
+    `asyncio.run()` raises "cannot be called from a running event loop": the second Kaggle run
+    failed there on 2026-10-07. In that case the coroutine gets its own loop on a worker thread.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 def run_cell(
     cell: Cell,
     *,
@@ -224,7 +243,7 @@ def run_cell(
     for rep in range(1, cell.repetitions + 1):
         if log.is_done(cell, rep):
             continue
-        asyncio.run(  # BEN-01: warm-up, discarded
+        run_sync(  # BEN-01: warm-up, discarded
             run_requests(
                 base_url,
                 model,
@@ -236,7 +255,7 @@ def run_cell(
                 timeout_s,
             )
         )
-        results, wall = asyncio.run(
+        results, wall = run_sync(
             run_requests(
                 base_url,
                 model,

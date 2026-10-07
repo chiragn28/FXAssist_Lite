@@ -232,10 +232,7 @@ notebook: ## Regenerate notebooks/fxassist_gpu_lab.ipynb from its builder
 	uv run python notebooks/build_notebook.py
 
 lab-dry-run: ## Run the whole GPU-lab flow against the mock LLM (no GPU), then a report
-	uv run python -c "from bench import lab, matrix; \
-	cfg = lab.LabConfig.for_mode('mock'); lab.check_environment(cfg); smoke = lab.smoke_test(cfg); \
-	lab.run_experiments(cfg, matrix.scaled_down(matrix.EXPERIMENTS), smoke); lab.oom_drill(cfg); \
-	print(lab.package(cfg))"
+	uv run python -m bench.dry_run
 	@latest=$$(ls -td results/mock/*/ | head -1) && \
 	uv run python -m bench.report "$$latest" --out "$$latest/BENCHMARKS.md" && \
 	echo "mock report: $$latest/BENCHMARKS.md (a dry run, not results)"
