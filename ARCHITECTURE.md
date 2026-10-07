@@ -252,7 +252,7 @@ Each ADR: **Plain meaning**, **Context**, **Options**, **Decision**, **Consequen
 | LangChain / LangGraph | Proven (LangGraph core, LangChain utilities) | graph code | Done |
 | SGLang, Ollama | Ollama: used. SGLang: stretch | notes | Ollama used; SGLang not attempted |
 | Redis, PostgreSQL | Proven | schema, cache metrics | Done, including failure drills |
-| CI/CD | Proven | workflows | Written and linted; the kind deployment it runs was run locally; not yet run on GitHub |
+| CI/CD | Proven | workflows | Done: green on GitHub Actions 2026-10-07 (lint, 362 tests, images within budget, Trivy 0 fixable HIGH/CRITICAL, kind integration test); a fork PR not yet tried |
 | Production troubleshooting | Partial: induced failures only | runbooks | Induced failures only: 6 runbooks written from drills; 3 GPU runbooks PENDING |
 
 ---

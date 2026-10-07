@@ -332,3 +332,9 @@ The first version of the rules ("circuit open for 1 minute", "timeouts above 3 p
    Clone it fresh, follow only the README, with new volumes and no local state, and fix whatever breaks in the scripts or docs rather than on the machine. Here that found a host port conflict that the prerequisite check now detects.
 2. *How do you keep a portfolio project honest?*
    Separate targets from evidence, date the status, mark unmeasured numbers PENDING, label development numbers, and list the limits first. Every claim should point to a file: a test, a drill log, a result.
+
+### After pushing: what the first real CI runs taught
+
+- **A linted workflow is not a working workflow.** actionlint passed, and the first run still failed in "Set up job": `astral-sh/setup-uv@v10` does not exist, because that action publishes only exact tags. I had checked the latest *release*, not that the tag I wrote existed.
+- **"Size" depends on the machine measuring it.** Docker Desktop's containerd store reports compressed image sizes; GitHub's runners report uncompressed ones (589 MB vs 234 MB for the same image). A budget must define its measure in a way every machine agrees on: the gzip size of `docker save` now gives 233 MB on GitHub and 235 MB locally.
+- **A clean machine is cleaner than you think.** The bootstrap check expected Python 3.11 to be present; a fresh runner has none until `uv sync` downloads it. And one job failed on a Docker Hub 502: a re-run, not a code change, was the right response.

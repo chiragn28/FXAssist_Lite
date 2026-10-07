@@ -165,7 +165,7 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | 2 | FastAPI gateway, cache, rate limit, LLM adapter, mock LLM | Done |
 | 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Done (Langfuse export configured but not tried against a real account) |
 | 4 | Containers, Helm, kind, watchdog | Done |
-| 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Done (CI not yet run on GitHub: the repo has no GitHub remote) |
+| 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Done; CI green on GitHub (github.com/chiragn28/FXAssist_Lite) |
 | 6 | GPU session 1 (single T4) | Waiting for you to run the notebook |
 | 7 | GPU session 2 (2x T4, tensor parallel) | Built into the same notebook; waiting for a run |
 | 8 | Final documentation and evidence | Done (the GPU numbers in it are PENDING) |

@@ -2,6 +2,16 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## After Phase 8: first runs on GitHub (2026-10-07)
+
+### Fixed
+- `astral-sh/setup-uv@v10` does not exist (setup-uv publishes exact tags only): pinned to `v10.2.0`, with a test.
+- The image size budget used `docker image inspect .Size`, compressed with Docker Desktop's containerd store but uncompressed on GitHub runners: now the gzip size of `docker save` (233/53/49 MB on GitHub, 235/53/49 locally).
+- `make bootstrap` failed on a clean runner because Python 3.11 is not installed until `uv sync` downloads it: now a warning.
+
+### Verified
+- CI green on GitHub: lint, 362 tests, secret scan of full history, Helm checks, images within budget, Trivy 0 fixable HIGH/CRITICAL, and the kind integration test (chart deployed, documents ingested, a question answered, RBAC proof). One image job failed on a Docker Hub 502 and passed on re-run.
+
 ## Phase 8: Documentation and evidence (2026-10-07)
 
 ### Added

@@ -47,7 +47,7 @@ I built a small but complete LLM platform for one use case: answering questions 
 
 - **GPU work ran on free T4s in a notebook, not on Kubernetes.** Kubernetes work ran on kind on a laptop, without a GPU. **No EKS or AWS GPU experience is claimed.**
 - GPU benchmark and evaluation numbers are **PENDING** until the Kaggle runs. Every local number is a development number from a 4-bit model on a laptop GPU.
-- CI is written and linted, and the kind deployment it performs was run locally (with the kind values; the CI values differ in 9 settings), but the workflow has not run on GitHub yet: the repository has no GitHub remote.
+- CI runs green on GitHub (lint, tests, image builds, vulnerability scan, a kind integration test). It needed three fixes on its first runs (a non-existent action tag, a size metric that differs between Docker setups, a bootstrap check that was too strict): it had only been linted locally before. A pull request from a fork has not been tried yet.
 - The evaluation set is small (39 questions, 10 attacks, 3 planted scenarios). It found real bugs; it cannot prove general quality.
 - Langfuse export is implemented and tested against fake endpoints, not against a real Langfuse account.
 - Production troubleshooting experience here means induced failures and drills, not real incidents with real users.
