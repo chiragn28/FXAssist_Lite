@@ -56,3 +56,6 @@ eval/runs/
 # GPU-lab mock dry runs and their scratch space (never results)
 results/mock/
 .lab-scratch/
+
+# Built by scripts/kaggle_lab.sh push (notebook copy + kernel metadata)
+.kaggle-kernel/

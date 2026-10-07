@@ -35,6 +35,18 @@ When you run the notebook, its first stage writes `environment.json` with what y
 6. Set `REPO_URL` in the parameters cell.
 7. On your laptop, run `make lab-dry-run` first: the same code against the mock LLM. If it fails here, it would fail on the GPU.
 
+### Alternative: run it through the Kaggle API (no browser)
+
+Steps 3 to 6 can be replaced by three make targets. The run is a background notebook version, so no browser tab has to stay open.
+
+1. Phone-verify the Kaggle account (still required; only you can do this).
+2. Once, in the Ubuntu terminal: `uvx --from kaggle==2.2.4 kaggle auth login` (signs in through your browser; credentials are cached by the CLI and never pass through the repo).
+3. Add your Kaggle username to `.env`: `FXA_KAGGLE_USERNAME=<username>`.
+4. `make lab-push` builds `.kaggle-kernel/` (the notebook with `REPO_URL` set from the `github` remote, plus `kernel-metadata.json` with `enable_gpu`, `enable_internet` and `machine_shape: NvidiaTeslaT4` = GPU T4 x2, private) and starts the run.
+5. `make lab-status` until it says complete, then `make lab-pull` downloads the output to `results/raw/<date>/`.
+
+Field names (`enable_gpu`, `enable_internet`, `machine_shape`) were read from the Kaggle CLI's `docs/kernels_metadata.md` on 2026-10-07. A background version starts with an empty `/kaggle/working`, so finished stages from an earlier version are not skipped; one run fits the budget.
+
 ## 3. Session plan and hour budget (GPU-06)
 
 Estimates for planning only; real times replace them after the first session.

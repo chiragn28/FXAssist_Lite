@@ -244,6 +244,15 @@ report: ## Build results/BENCHMARKS.md from a downloaded GPU-lab run: make repor
 	@test -n "$(RUN)" || { echo 'usage: make report RUN=results/raw/<date>/fxassist_results' >&2; exit 2; }
 	uv run python -m bench.report "$(RUN)"
 
+lab-push: ## Start the GPU lab on Kaggle via the API: GPU T4 x2, Internet on (needs ~/.kaggle/kaggle.json)
+	@bash scripts/kaggle_lab.sh push
+
+lab-status: ## Show the Kaggle GPU-lab run status
+	@bash scripts/kaggle_lab.sh status
+
+lab-pull: ## Download the Kaggle GPU-lab output into results/raw/<date>/
+	@bash scripts/kaggle_lab.sh pull
+
 ##@ Demo
 demo: LLM ?= mock
 demo: ## End-to-end demo: stack, ingest, key, questions (LLM=ollama for the real model)

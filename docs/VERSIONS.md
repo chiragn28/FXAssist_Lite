@@ -102,3 +102,9 @@ Binaries installed into `~/.local/bin` (user-level, no sudo) from the official r
 | Trivy | v0.75.0 | Vulnerability scan in CI, report only. Release binary with checksum, not the GitHub Action | GitHub releases API; checksum file; scan run locally: 2 HIGH (setuptools' vendored jaraco.context CVE-2026-23949, wheel CVE-2026-24049) in all images, fixed by removing pip/setuptools/wheel from the runtime stage: 0 after |
 | actionlint | v1.7.12 (docker image) | Workflow lint, run locally | ran clean |
 | GitHub Actions used | `actions/checkout@v7`, `astral-sh/setup-uv@v10` | Only these two; Helm, kind, kubectl, gitleaks and Trivy are downloaded and checksum-verified | GitHub releases API |
+
+## GPU lab tooling
+
+| Component | Version | Where | Why | Verified how |
+|---|---|---|---|---|
+| Kaggle CLI | 2.2.4 (run with `uvx`, not a project dependency) | `scripts/kaggle_lab.sh` | Starts and downloads GPU-lab runs without the browser. 2.x signs in with `kaggle auth login` or an access token and cannot report the username, so it comes from `FXA_KAGGLE_USERNAME` | PyPI JSON API and `kaggle auth --help` on 2026-10-07; kernel metadata fields from the CLI's `docs/kernels_metadata.md` |
