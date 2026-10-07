@@ -32,6 +32,9 @@ Difficulty tags:
 10. [CI/CD and supply chain](#10-cicd-and-supply-chain) (5 questions)
 11. [Cost and capacity planning](#11-cost-and-capacity-planning) (4 questions)
 12. [System design follow-ups](#12-system-design-follow-ups) (6 questions)
+13. [LLMOps at a forex and CFD broker](#13-llmops-at-a-forex-and-cfd-broker) (8 questions)
+
+Trading vocabulary (pips, lots, margin level, stop out, A-book and B-book, swaps) is in `docs/TRADING_TERMS.md`.
 
 ---
 
@@ -400,3 +403,39 @@ Two different problems. Images in user questions are built here, the simple way 
 ### 12.6 What would you change first to make this production-ready? [intermediate]
 
 Real secrets management (External Secrets or a vault) instead of a script. Alertmanager routing, plus kube-state-metrics so the documented OOM alerts actually run. Replicated Qdrant, a managed PostgreSQL with retention on the request log, and backups for both. Autoscaling on queue depth, GPU nodes with the model server behind the same interface, and a load test that sets the SLOs. A real Langfuse or OTLP backend, tried for real. Approval of ADR-024 and ADR-025, and token-level streaming behind a flag if a use case accepts unvalidated drafts (`docs/INTERVIEW_NOTES.md`). And a fork pull request through CI, to close CI-02.
+
+---
+
+## 13. LLMOps at a forex and CFD broker
+
+### 13.1 A broker wants a client support assistant. What is different from a generic chatbot? [intermediate]
+
+Three things: regulation, money and load. Regulation: the assistant must never give personal advice ("should I buy gold?"), must not misstate leverage caps or fees, and must carry the required risk warnings, because a wrong answer is a compliance breach, not just a bad answer. That is why FXAssist refuses advice in code, cites every sentence, rejects numbers not found in the cited text, and adds the disclaimer in the gateway, not in the model (SAF-01, SAF-03, SAF-06). Money: questions touch deposits, withdrawals and margin, so the assistant needs read-only, permission-checked access to account data, never the ability to move funds or trade. Load: traffic spikes at market events (non-farm payrolls, rate decisions), exactly when the platforms are busiest, so it needs rate limits, caching for repeated questions, a circuit breaker on the model and graceful degradation (section 7).
+
+### 13.2 A client asks "what is the spread and commission on my account?" How do you answer correctly? [intermediate]
+
+The answer depends on the account type (a raw-spread account with commission, or a standard account with the cost in the spread), the platform, the instrument and the legal entity the client belongs to, and fees change over time. So this is retrieval over the broker's current, versioned fee pages, filtered by the client's entity and account type, not something the model knows. Cite the fee page, and copy numbers exactly (the number check catches invented ones). Put the document version in the cache key, so a fee change expires cached answers the way FXAssist's corpus version does (CAC-02). Watch the classic error: commission "per side" vs "round turn" differs by a factor of two (`docs/TRADING_TERMS.md`). For a live spread, call a pricing API instead of quoting a document.
+
+### 13.3 The same question has different correct answers in different jurisdictions. How do you handle it? [advanced]
+
+A broker usually runs one legal entity per regulator (for example ASIC in Australia, CySEC under EU rules), and the leverage cap, negative balance protection, bonuses and even the products offered depend on the entity. Retrieval must filter documents by the client's entity, the same way a multi-tenant system filters by tenant (section 12.2); a missing filter quotes another regulator's rule as if it applied. The FXAssist corpus already mixes ESMA, FCA, ASIC, CFTC and Japanese rules, and the prompt tells the model to name the regulator when rules differ and to report disagreements (rule 5 in `prompts.py`). The evaluation needs jurisdiction-specific items, like a18 (Japan 25:1) against a21 (EU 30:1).
+
+### 13.4 Where must an AI agent at a broker never be allowed to act on its own? [advanced]
+
+Anything that moves money or risk: placing, changing or closing trades, deposits and withdrawals, changing leverage or client classification (retail to professional), and KYC or AML decisions. Agents can draft, summarise, triage and fill forms, but the action needs a human confirmation or a deterministic rule, plus an audit log of who approved what. Least privilege like the watchdog's RBAC (one verb on one resource, section 9.4), allowlisted tools, and every tool input treated as untrusted, because a support email or a screenshot can carry injected instructions (SAF-04, SAF-09). Test it like FXAssist's attack set: fixed attacks, measured pass rate, a release gate.
+
+### 13.5 How would you monitor an LLM feature in production at a broker? [intermediate]
+
+Four layers. Service: request rate, errors, p95 latency split into queue, retrieval, time to first token and generation (OBS-05), and model-call failure alerts that the resilience layer cannot hide (section 8.4). Model server: queue depth, KV-cache usage and preemptions (section 8.6). Quality: fallback (abstention) rate, refusal rate, citation failures and validator rejections, by language and topic, plus a fixed evaluation set run on every model, prompt or corpus change. Compliance: sampled transcripts reviewed by compliance staff, every advice refusal and risk warning logged, and no client personal data in logs or traces (OBS-02). Alert on sudden shifts, such as abstentions doubling after a document update.
+
+### 13.6 Market news hits and support traffic triples in a minute. What happens to your system? [advanced]
+
+Plan for it as a known event, not a surprise. The gateway sheds or queues load with per-client rate limits and a bounded concurrency limit that returns a clear 503 with Retry-After instead of timing out (API-04). Popular questions ("why did my stop slip?", "why did spreads widen?") hit the answer cache, and request coalescing stops a stampede of identical generations (section 7.5). The model servers need headroom: autoscaling cannot react in time because a vLLM replica takes one to two minutes to start (section 1.8), so scale up ahead of scheduled releases from the economic calendar. If the model fails, the circuit breaker fails fast and the page shows a static notice and links to the status page instead of hanging.
+
+### 13.7 How do you evaluate an assistant that explains leverage and margin to clients? [intermediate]
+
+Build a fixed set from real support questions, with expected sources and checkable facts: leverage caps per jurisdiction, the 50% margin close-out, negative balance protection, how swaps are charged, pip value for a standard lot. Include questions it must refuse (advice, predictions), questions it must not answer (out of scope, other entities' products), and attacks. Score retrieval, citation correctness, facts and refusals separately, as FXAssist does (section 5.1), and add a number-attribution check for the known gap: "20:1 for majors" is a real number from the right document attached to the wrong instrument (section 5.4). Rerun on every change; promote only with no safety regression, as the fine-tuning experiment showed (section 12.4).
+
+### 13.8 Why might a broker self-host models instead of calling a hosted API? [intermediate]
+
+Data control (client conversations and KYC-adjacent data stay inside the firm and its regulated hosting), predictable cost at high volume, latency close to the trading infrastructure, and freedom to fine-tune and pin a version so behaviour does not change underneath a compliance sign-off. The costs: GPU capacity planning, serving and reliability work, and usually a smaller model than the best hosted ones. The pragmatic answer is often both, behind one OpenAI-compatible interface (ADR-003): a self-hosted model for client-facing and sensitive traffic, a hosted one for internal tools where policy allows, with the same evaluation set deciding which model serves which use case. FXAssist's vLLM benchmarks are the sizing evidence for the self-hosted side (section 11).

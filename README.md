@@ -232,5 +232,7 @@ Full analysis and cautions: [results/BENCHMARKS.md](results/BENCHMARKS.md), [res
 | [docs/runbooks/](docs/runbooks/) | One runbook per failure drill |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Every pinned version and how it was verified |
 | [docs/GLOSSARY.md](docs/GLOSSARY.md) | Plain-language definitions |
+| [docs/TRADING_TERMS.md](docs/TRADING_TERMS.md) | Forex and CFD vocabulary: pips, lots, margin, stop out, execution models, regulation |
+| [docs/INTERVIEW_QA.md](docs/INTERVIEW_QA.md) | 88 interview questions with answers grounded in this repo |
 | [data/SOURCES.md](data/SOURCES.md) | The 26 documents, their licences and whether they may be redistributed |
 | [CHANGELOG.md](CHANGELOG.md) | Changes per phase |
