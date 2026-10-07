@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     max_rewrites: int = 1
     max_question_chars: int = 1000
 
+    # How `make eval` labels its summary; the GPU lab sets its own (ADR-016: only GPU-lab runs
+    # are reported results).
+    eval_label: str = "local dev run, not a reported benchmark"
+
     @property
     def resolved_qdrant_url(self) -> str:
         return self.qdrant_url or f"http://localhost:{self.qdrant_http_port}"

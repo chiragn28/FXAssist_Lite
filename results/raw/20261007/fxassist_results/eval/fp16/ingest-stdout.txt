@@ -1,0 +1,8 @@
+fetch: 26 sources (downloaded 26)
+documents: 26 (ingested 26)
+chunks in collection: 727
+newly embedded: 727, removed as stale: 0
+corpus version: b49a4f06efe11e68
+  INGESTED fca-ps19-18: 3 of 139 chunks skipped as non-English
+  INGESTED wiki-leverage-finance: 1 of 17 chunks skipped as non-English
+report: /kaggle/tmp/data/reports/ingest-report.json

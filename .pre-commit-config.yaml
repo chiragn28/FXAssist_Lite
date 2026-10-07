@@ -9,7 +9,9 @@ repos:
         exclude: ^deploy/helm/[^/]+/templates/  # Go templates; checked by helm lint and tests/test_helm.py
       - id: check-toml
       - id: end-of-file-fixer
+        exclude: ^results/raw/  # GPU-lab output is kept byte-for-byte as downloaded
       - id: trailing-whitespace
+        exclude: ^results/raw/  # GPU-lab output is kept byte-for-byte as downloaded
         args: [--markdown-linebreak-ext=md]
       - id: mixed-line-ending # ENV-01
         args: [--fix=lf]

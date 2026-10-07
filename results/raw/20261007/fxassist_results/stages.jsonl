@@ -1,0 +1,16 @@
+{"stage": "environment", "status": "ok", "at": "2026-10-07T09:54:52Z", "gpu_count": 2, "note": "2 GPU(s), bf16=False"}
+{"stage": "install-vllm", "status": "ok", "at": "2026-10-07T09:56:42Z", "versions": "0.31.0 2.13.0+cu130 13.0"}
+{"stage": "download Qwen/Qwen2.5-3B-Instruct", "status": "ok", "at": "2026-10-07T09:57:07Z", "attempt": 1}
+{"stage": "smoke", "status": "ok", "at": "2026-10-07T09:59:27Z", "backend": "default", "backend_seen_in_log": ["TRITON_ATTN"], "completion_tokens": 16, "ignore_eos_exact": true, "sample": "In the context of forex trading, \"pip\" stands for \"percentage in point"}
+{"stage": "experiment baseline/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment baseline/awq", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment prefix-caching-on/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment max-num-seqs-8/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment gpu-mem-0.80/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment max-model-len-2048/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "experiment tensor-parallel-2/fp16", "status": "skipped", "at": "2026-10-07T09:59:28Z", "note": "below the priority cut"}
+{"stage": "download Qwen/Qwen2.5-3B-Instruct", "status": "ok", "at": "2026-10-07T09:59:29Z", "attempt": 1}
+{"stage": "eval fp16", "status": "ok", "at": "2026-10-07T10:05:14Z", "run_dir": "/kaggle/working/fxassist_results/eval/fp16", "missing_documents": []}
+{"stage": "download Qwen/Qwen2.5-3B-Instruct-AWQ", "status": "ok", "at": "2026-10-07T10:05:20Z", "attempt": 1}
+{"stage": "eval awq", "status": "ok", "at": "2026-10-07T10:08:26Z", "run_dir": "/kaggle/working/fxassist_results/eval/awq", "missing_documents": []}
+{"stage": "package", "status": "ok", "at": "2026-10-07T10:08:26Z", "zip": "/kaggle/working/fxassist_results.zip", "size_kb": 42}

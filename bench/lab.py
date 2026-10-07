@@ -622,6 +622,7 @@ def run_eval(cfg: LabConfig, variant: str, repo_dir: Path) -> dict[str, Any]:
         "FXA_LLM_BASE_URL": server.base_url,
         "FXA_LLM_MODEL": server.served_model,
         "FXA_LLM_MAX_CONTEXT_TOKENS": str(config["max_model_len"]),
+        "FXA_EVAL_LABEL": f"GPU lab: vLLM, {config['model']}, {cfg.mode}",
     }
     (cfg.scratch_dir / "data").mkdir(parents=True, exist_ok=True)
     shutil.copy(repo_dir / "data" / "sources.yaml", cfg.scratch_dir / "data" / "sources.yaml")

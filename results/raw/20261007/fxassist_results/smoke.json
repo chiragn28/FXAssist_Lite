@@ -1,0 +1,12 @@
+{
+  "stage": "smoke",
+  "status": "ok",
+  "at": "2026-10-07T09:59:27Z",
+  "backend": "default",
+  "backend_seen_in_log": [
+    "TRITON_ATTN"
+  ],
+  "completion_tokens": 16,
+  "ignore_eos_exact": true,
+  "sample": "In the context of forex trading, \"pip\" stands for \"percentage in point"
+}

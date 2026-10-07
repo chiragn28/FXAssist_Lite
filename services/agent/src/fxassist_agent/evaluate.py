@@ -166,8 +166,7 @@ def summarise(items: list[ItemResult], settings: Settings) -> str:
     ]
     width = max(len(r[0]) for r in rows)
     lines = [
-        f"Model: {settings.llm_model} at {settings.resolved_llm_base_url}  "
-        f"(local dev run, not a reported benchmark)",
+        f"Model: {settings.llm_model} at {settings.resolved_llm_base_url}  ({settings.eval_label})",
         f"top_k={settings.top_k} max_per_source={settings.max_per_source} "
         f"chunk_size={settings.chunk_size} grader={'on' if settings.grader_enabled else 'off'}",
         "",
