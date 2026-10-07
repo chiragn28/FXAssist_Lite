@@ -217,8 +217,16 @@ def main() -> int:
         "results", type=Path, help="directory with benchmark.jsonl, stages.jsonl ..."
     )
     parser.add_argument("--out", type=Path, default=Path("results/BENCHMARKS.md"))
+    parser.add_argument(
+        "--notes",
+        type=Path,
+        default=Path("results/BENCHMARK_NOTES.md"),
+        help="hand-written analysis appended after the generated tables, if the file exists",
+    )
     args = parser.parse_args()
     text = render(args.results)
+    if args.notes.exists():
+        text += "\n" + args.notes.read_text()
     if "MOCK DRY RUN" in text and args.out == Path("results/BENCHMARKS.md"):
         print(
             "refusing to write mock numbers to results/BENCHMARKS.md; pass --out elsewhere",

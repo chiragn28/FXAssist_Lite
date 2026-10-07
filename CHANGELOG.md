@@ -2,6 +2,25 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## Phases 6 and 7: GPU lab on Kaggle (2026-10-07)
+
+### Added
+- Results from 2 x Tesla T4, vLLM 0.31.0: `results/BENCHMARKS.md` (FP16 vs AWQ, concurrency 1 to 32, four knobs, KV-cache and queue metrics, hand-written analysis from `results/BENCHMARK_NOTES.md`), `results/tensor_parallel.md`, `results/EVAL_REPORT.md`. Raw files in `results/raw/`, with a README saying which run is which.
+- Runbooks written from the lab's logs: `gpu-oom.md`, `kv-cache-exhaustion.md`, `slow-model-load.md`.
+- `bench/report.py --notes`: appends hand-written analysis to the generated report.
+- `make lab-push`, `lab-status`, `lab-pull`: run the lab as a background Kaggle notebook version through the Kaggle CLI.
+- Eval summaries say where they ran (`FXA_EVAL_LABEL`).
+
+### Fixed
+- GPU-04: Kaggle's Python 3.13 has no `ensurepip`; virtualenvs are created with uv.
+- GPU-05: benchmark coroutines run in their own thread inside Jupyter's event loop.
+- DAT-07: Wikimedia rejected the generic User-Agent, so the first GPU eval ran without the 10 Wikipedia documents; the User-Agent now carries a contact URL, and fetch and ingest reports are saved with every eval.
+- LLM-07: unambiguous citation variants vLLM produced (`[According to S1]`, `(S1)`) are normalised.
+
+### Verified
+- Edge cases GPU-01, GPU-03 and GPU-08 closed with real runs. 101 of 102 rows DONE; open: CI-02 (fork pull request).
+- Evaluation: FP16 46/52, AWQ 42/52, retrieval 22/22, safety 16/16 for both.
+
 ## After Phase 8: first runs on GitHub (2026-10-07)
 
 ### Fixed

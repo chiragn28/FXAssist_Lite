@@ -2,7 +2,7 @@
 
 A zero-cost, self-hosted LLM platform that answers questions over public forex/CFD documentation, with citations. Built to learn and demonstrate LLMOps skills: vLLM serving and GPU tuning, RAG with Qdrant, LangGraph, observability, Kubernetes with Helm, and reliability engineering.
 
-> **Status: Phases 0 to 5 complete; GPU results PENDING.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose, and on a local kind cluster with a Helm chart, probes, an autoscaler and a canary watchdog. The GPU-lab notebook (vLLM on a free T4) is built and dry-run against a mock; it has not been run on a GPU yet, so there are no benchmark results. See [Project status](#project-status).
+> **Status: all phases complete.** A FastAPI gateway serves cited answers from 26 public documents over SSE, with API keys, rate limiting, caching and tested failure handling for every dependency, plus Prometheus metrics, a Grafana dashboard, alert rules and OpenTelemetry traces. Runs locally with Docker Compose, and on a local kind cluster with a Helm chart, probes, an autoscaler and a canary watchdog. The GPU lab (vLLM 0.31.0 on free Kaggle T4s) has run: FP16 vs AWQ benchmarks, four tuning knobs, tensor parallel on two T4s, and the evaluation on both models. See [Results](#results).
 
 ## Honest limits
 
@@ -166,17 +166,33 @@ To give WSL2 more memory, add `[wsl2]` / `memory=8GB` to `%UserProfile%\.wslconf
 | 3 | Observability: OpenTelemetry, Prometheus, Grafana, Langfuse | Done (Langfuse export configured but not tried against a real account) |
 | 4 | Containers, Helm, kind, watchdog | Done |
 | 5 | Full CI/CD, Kaggle notebooks, GPU playbook | Done; CI green on GitHub (github.com/chiragn28/FXAssist_Lite) |
-| 6 | GPU session 1 (single T4) | Waiting for you to run the notebook |
-| 7 | GPU session 2 (2x T4, tensor parallel) | Built into the same notebook; waiting for a run |
-| 8 | Final documentation and evidence | Done (the GPU numbers in it are PENDING) |
+| 6 | GPU session 1 (single T4) | Done 2026-10-07: [results/BENCHMARKS.md](results/BENCHMARKS.md), [results/EVAL_REPORT.md](results/EVAL_REPORT.md) |
+| 7 | GPU session 2 (2x T4, tensor parallel) | Done 2026-10-07: [results/tensor_parallel.md](results/tensor_parallel.md) |
+| 8 | Final documentation and evidence | Done |
 
 ## Results
 
-**PENDING.** Reported benchmark and evaluation numbers come only from the GPU lab (Phases 6 and 7), in [results/](results/): run the notebook, then `make report`. Local development runs with a 4-bit model are described in [LEARNING.md](LEARNING.md) and are not results.
+Reported numbers come only from the GPU lab (Kaggle, Tesla T4, vLLM 0.31.0, Qwen2.5-3B-Instruct, 2026-10-07). Raw files are in [results/raw/](results/raw/).
+
+| | FP16 | AWQ 4-bit |
+|---|---|---|
+| Throughput, short prompts, 32 users | 629 tokens/s | 1,094 tokens/s |
+| Throughput, RAG-sized prompts, 32 users | 135 tokens/s | 144 tokens/s |
+| KV cache on one T4 (utilisation 0.90) | 199,744 tokens | 300,496 tokens |
+| Evaluation, 52 items | 46 passed | 42 passed |
+| Safety and injection tests | 16/16 | 16/16 |
+| Eval latency p50 / p95 | 3.5 s / 6.7 s | 1.5 s / 2.4 s |
+
+- Tensor parallel on two T4s: 1.6x to 1.8x one GPU's throughput at 16 and 32 users, over PCIe without peer-to-peer ([results/tensor_parallel.md](results/tensor_parallel.md)).
+- Prefix caching cut long-prompt time to first token from 3.30 s to 0.20 s, a best case (96% of prompt tokens were cached).
+- Long first-token waits were prefill queueing, not memory: KV cache at most 21% full, 0 preemptions.
+- Failed eval items were the model declining to answer, not invented answers. Small samples: one question moves a rate by about 4.5 points.
+
+Full analysis and cautions: [results/BENCHMARKS.md](results/BENCHMARKS.md), [results/EVAL_REPORT.md](results/EVAL_REPORT.md). Local development runs with a 4-bit model are in [LEARNING.md](LEARNING.md) and are not results.
 
 ## What is tested
 
-[EDGE_CASES.md](EDGE_CASES.md) lists 102 failure scenarios; each one has a test, a recorded drill, or a stated reason why it is still open. About 360 offline tests run with `make test` (no Docker, no model, no network beyond localhost). Drills against real services: `make drill` (Redis, PostgreSQL, Qdrant stopped one by one), the hanging-model drill (`docs/runbooks/llm-timeout-storm.md`), `make kind-rollout-test`, `make kind-watchdog-drill`, `make kind-rbac-check`, and a PostgreSQL disk-full drill. Still open: rows that need the GPU runs (GPU-03, GPU-08), a fork pull request on GitHub (CI-02), and the fresh-clone check (ENV-05).
+[EDGE_CASES.md](EDGE_CASES.md) lists 102 failure scenarios; each one has a test, a recorded drill, or a stated reason why it is still open. About 360 offline tests run with `make test` (no Docker, no model, no network beyond localhost). Drills against real services: `make drill` (Redis, PostgreSQL, Qdrant stopped one by one), the hanging-model drill (`docs/runbooks/llm-timeout-storm.md`), `make kind-rollout-test`, `make kind-watchdog-drill`, `make kind-rbac-check`, and a PostgreSQL disk-full drill. Still open: a pull request from a fork on GitHub (CI-02).
 
 ## Repository layout
 

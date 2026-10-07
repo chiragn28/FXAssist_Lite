@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 MAKEFLAGS += --no-print-directory
 
 # Raise this as phases are completed; `make bootstrap` then requires those tools.
-PHASE ?= 5
+PHASE ?= 8
 
 # Use .env when present, otherwise the committed defaults (ENV-04: ports come from here).
 ENV_FILE ?= $(if $(wildcard .env),.env,.env.example)

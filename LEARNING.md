@@ -314,6 +314,39 @@ The first version of the rules ("circuit open for 1 minute", "timeouts above 3 p
 
 ---
 
+## Phases 6 and 7: GPU lab on Kaggle
+
+Run 2026-10-07 through the Kaggle API (`make lab-push`, `lab-status`, `lab-pull`) on 2 x Tesla T4. Numbers: `results/BENCHMARKS.md`, `results/tensor_parallel.md`, `results/EVAL_REPORT.md`.
+
+### Concepts and decisions
+
+- **The first real run is a test of the harness, not just of the model.** It exposed things no dry run could: Kaggle's Python 3.13 has no `ensurepip` (virtualenvs now come from uv), Jupyter already runs an event loop (benchmarks now run in their own thread), and Wikimedia rejected the downloader's generic User-Agent, so all 10 Wikipedia documents were missing from the GPU index. That last one did not crash anything: it showed up only as a lower retrieval hit rate (15/22). The fetch and ingest reports now travel with every evaluation, and an incomplete corpus is flagged in the experiment log. **A silent partial failure is worse than a crash.**
+
+- **Quantisation helps where memory bandwidth is the limit.** Decoding reads every weight once per step, so AWQ's 1.95 GiB beats FP16's 5.79 GiB by 1.7x to 2.8x at low load. With RAG-sized prompts and many users the work becomes prefill, which is limited by arithmetic, and AWQ's lead shrinks to 1.07x to 1.14x. Its other benefit is memory: 50% more KV cache. The cost showed up in the evaluation: AWQ answered 13 of 22 answerable questions against FP16's 16.
+
+- **vLLM plans memory at start-up.** The induced OOM drill (utilisation 0.99, 32,768-token limit, 256 sequences) started and served normally. vLLM measures weights, activations and CUDA graphs once, gives the rest to the KV cache, and queues requests instead of over-allocating; an impossible configuration is refused at start-up. The 36 KiB-per-token formula matched every server log exactly.
+
+- **Read the queue before blaming memory.** Long first-token waits (p95 17 s at 32 users on long prompts) looked like memory pressure. vLLM's own metrics said otherwise: the KV cache was at most 21% full, nothing was preempted, and up to 24 requests waited. That is prefill queueing. The `max_num_seqs 8` experiment shows the same effect on purpose (TTFT 0.29 s to 4.57 s).
+
+- **Prefix caching numbers are a best case unless the traffic says otherwise.** TTFT on long prompts fell from 3.30 s to 0.20 s, because 96% of prompt tokens were reused: the benchmark prompts share context blocks and repeat. Real RAG questions retrieve different excerpts. The number is reported with that caveat, and prefix caching is off everywhere else.
+
+- **Two GPUs without peer-to-peer still work.** The T4s cannot read each other's memory; vLLM detected it, disabled custom all-reduce and used NCCL through host memory. Tensor parallelism still gave 1.6x to 1.8x at 16 and 32 users. The planned NCCL workaround was never needed.
+
+- **Flag a suspect measurement instead of dropping or trusting it.** FP16 single-user short prompts slid from 26 to 9 tokens/s at 100% utilisation: probably clock throttling on a passively cooled T4, but clocks were not sampled, so it is flagged as unreliable, not explained away.
+
+- **The eval found a new gap in the output checks.** AWQ answered "ESMA sets a leverage limit of [S1]": a citation used as the value. It passes the citation and number checks because there is no number to check. Only the content check caught it.
+
+### Interview questions I can now answer
+
+1. *When does weight quantisation speed up inference, and when not?*
+   When decoding is memory-bandwidth bound: few concurrent requests, short prompts. Each step reads all weights, so 4-bit weights move about a third of the data. With long prompts and many users, prefill dominates and is compute bound; dequantisation even adds work. Measured here: 2.3x at 4 users on short prompts, 1.07x at 32 users on RAG-sized prompts. Quantisation also frees memory for KV cache, and can cost answer quality: check both.
+2. *Users report slow first tokens under load. Is it the KV cache?*
+   Look at KV-cache usage, preemptions and the waiting queue together. Cache near full with preemptions means memory: shorten max length, reduce sequences, add memory or quantise. Cache mostly empty with a long queue means scheduling or prefill: chunked prefill, a larger per-step token budget, prefix caching for shared context, or more replicas.
+3. *How did you validate a benchmark run before trusting it?*
+   Errors counted (0 in 90 rows), three repetitions with ranges, the server's own metrics compared with the client's, the start-up log checked against the memory formula, and every surprising cell investigated: one was flagged as probable throttling, and one evaluation was thrown out because the index was incomplete.
+
+---
+
 ## Phase 8: Documentation and evidence
 
 ### Concepts and decisions

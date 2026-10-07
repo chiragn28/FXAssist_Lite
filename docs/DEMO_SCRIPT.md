@@ -52,4 +52,4 @@ Show `deploy/helm/fxassist/values.yaml` and the output of `make kind-rbac-check`
 
 Show `docs/KAGGLE_PLAYBOOK.md` section 1 and `results/BENCHMARKS.md`.
 
-> "For GPU serving, a vLLM lab on free Kaggle T4s: FP16 vs AWQ, concurrency 1 to 32, one knob at a time, resumable if the session dies. I verified T4 support in vLLM's source before spending GPU hours. [If results exist: quote one row. If not: those numbers are pending; I won't quote numbers I haven't measured.] No EKS or AWS GPU experience is claimed: the GPU work is a notebook, the Kubernetes work is kind."
+> "For GPU serving, a vLLM lab on free Kaggle T4s: FP16 vs AWQ, concurrency 1 to 32, one knob at a time, resumable if the session dies. I verified T4 support in vLLM's source before spending GPU hours. AWQ doubled throughput on short prompts but barely helped on RAG-sized ones with many users, and two T4s gave 1.6 to 1.8 times one. No EKS or AWS GPU experience is claimed: the GPU work is a notebook, the Kubernetes work is kind."

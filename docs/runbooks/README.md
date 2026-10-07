@@ -9,7 +9,7 @@ One runbook per failure drill: symptom, detection, root cause, fix, prevention. 
 | [`llm-timeout-storm.md`](llm-timeout-storm.md) | 3 | Written from the hanging-model drill |
 | [`pod-oomkilled.md`](pod-oomkilled.md) | 4 | Written from an unplanned ingestion OOM and a drill on kind |
 | [`watchdog-restart-loop.md`](watchdog-restart-loop.md) | 4 | Written from `make kind-watchdog-drill` |
-| `gpu-oom.md` | 6 | PENDING |
-| `kv-cache-exhaustion.md` | 6 | PENDING |
-| `slow-model-load.md` | 6 | PENDING |
+| [`gpu-oom.md`](gpu-oom.md) | 6 | Written from the GPU lab's memory accounting; the planned OOM drill started anyway (documented), a failing drill is specified |
+| [`kv-cache-exhaustion.md`](kv-cache-exhaustion.md) | 6 | Written from vLLM metrics in the GPU lab: no exhaustion occurred (peak 21%, 0 preemptions); queueing was diagnosed instead; an exhausting drill is specified |
+| [`slow-model-load.md`](slow-model-load.md) | 6 | Written from 11 real vLLM starts (cold 77 to 104 s, warm 33 s) |
 | [`disk-full.md`](disk-full.md) | 5 | Written from a PostgreSQL disk-full drill (extra, DEP-05) |

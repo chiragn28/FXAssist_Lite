@@ -1,6 +1,6 @@
 # Interview notes
 
-How to explain FXAssist Lite, the trade-off behind each decision, what it does not prove, and answers to the follow-up questions it invites. Numbers quoted here are labelled: **local** (laptop, development, not results) or **GPU lab** (from `results/`; PENDING until the Kaggle runs).
+How to explain FXAssist Lite, the trade-off behind each decision, what it does not prove, and answers to the follow-up questions it invites. Numbers quoted here are labelled: **local** (laptop, development, not results) or **GPU lab** (from `results/`, Kaggle T4, 2026-10-07).
 
 ## The 1-minute version
 
@@ -13,7 +13,7 @@ I built a small but complete LLM platform for one use case: answering questions 
 3. **Agent.** A LangGraph state machine: guard (cheap rules for advice requests, injection, vague questions), retrieve, grade, optional rewrite, generate, validate. The validator removes citations to excerpts that were not retrieved, rejects numbers that are not in the cited text, and drops sentences after the last citation, which is where injected text tends to land.
 4. **Gateway.** Every dependency has a written failure policy, and each one was broken on purpose: Redis down means no cache and a stricter local rate limit; PostgreSQL down means buffered logs and cached keys; Qdrant down means 503, because answering without documents would be making things up. The LLM adapter has timeouts, retries with jittered backoff, a circuit breaker and stream-break detection, all tested against a mock server that can misbehave on purpose.
 5. **Operations.** Metrics separate queue time, retrieval, time to first token and total time. A drill with a dead model showed my first alert rules stayed silent for five minutes, because the cache and the circuit breaker hid the failure from users; the rules now watch the model calls. On kind: zero failed requests across rolling updates (after fixing how draining treated keep-alive connections), RBAC limited to one deployment and proved with `kubectl auth can-i`, and a watchdog with cooldowns so it cannot loop.
-6. **GPU lab.** vLLM 0.31.0 on a T4, verified against its source (the T4 gets the Triton attention backend; bfloat16 is not available, so float16 is forced). FP16 vs AWQ, concurrency 1 to 32, short vs RAG-sized prompts, one knob at a time, an induced OOM, tensor parallel on two T4s. Results: PENDING until I run it.
+6. **GPU lab.** vLLM 0.31.0 on a T4, verified against its source (the T4 gets the Triton attention backend; bfloat16 is not available, so float16 is forced). FP16 vs AWQ, concurrency 1 to 32, short vs RAG-sized prompts, one knob at a time, an induced OOM, tensor parallel on two T4s. **GPU lab:** AWQ gave 1.7x to 2.3x FP16's throughput on short prompts but almost nothing (1.07x to 1.14x) on RAG-sized prompts with many users, because the work shifts from reading weights to prefill; two T4s gave 1.6x to 1.8x; long first-token waits were prefill queueing with the KV cache at most 21% full. The evaluation passed 46/52 (FP16) and 42/52 (AWQ), with every safety test passed and failures being abstentions.
 
 ## Decisions and their trade-offs
 
@@ -46,7 +46,7 @@ I built a small but complete LLM platform for one use case: answering questions 
 ## Honest limits (say these first)
 
 - **GPU work ran on free T4s in a notebook, not on Kubernetes.** Kubernetes work ran on kind on a laptop, without a GPU. **No EKS or AWS GPU experience is claimed.**
-- GPU benchmark and evaluation numbers are **PENDING** until the Kaggle runs. Every local number is a development number from a 4-bit model on a laptop GPU.
+- GPU numbers come from one Kaggle session on T4s (3 repetitions per cell, one eval run per model). A T4 is not an H100, and the first GPU eval was invalid (10 documents missing from the index) until a rerun: say so if asked. Every local number is a development number from a 4-bit model on a laptop GPU.
 - CI runs green on GitHub (lint, tests, image builds, vulnerability scan, a kind integration test). It needed three fixes on its first runs (a non-existent action tag, a size metric that differs between Docker setups, a bootstrap check that was too strict): it had only been linted locally before. A pull request from a fork has not been tried yet.
 - The evaluation set is small (39 questions, 10 attacks, 3 planted scenarios). It found real bugs; it cannot prove general quality.
 - Langfuse export is implemented and tested against fake endpoints, not against a real Langfuse account.
@@ -56,7 +56,7 @@ I built a small but complete LLM platform for one use case: answering questions 
 
 **Why not just call the model once with the documents in the prompt?** Retrieval lets the corpus grow beyond the context window, the grader and validator are cheap safety layers, and every step is visible in traces. For 26 documents a long-context call would work too; it would not teach or show the operational parts.
 
-**How do you know the answers are correct?** For answerable questions: retrieval hit rate (an expected document was retrieved), fact hit rate (the retrieved text contains the fact), citation correctness, and output checks in code. The honest gap: a number that is in the cited excerpt but attributed to the wrong thing passes (for example "20:1 for majors" when the excerpt says 20:1 for non-majors). The local 3B model did exactly that; the GPU eval will show whether the FP16 model does it less.
+**How do you know the answers are correct?** For answerable questions: retrieval hit rate (an expected document was retrieved), fact hit rate (the retrieved text contains the fact), citation correctness, and output checks in code. The honest gap: a number that is in the cited excerpt but attributed to the wrong thing passes (for example "20:1 for majors" when the excerpt says 20:1 for non-majors). The local 3B model did exactly that. On the GPU, neither model did; their failures were abstentions, plus one AWQ answer that used a citation label in place of the number ("a limit of [S1]"), a gap the checks now document.
 
 **What happens when the model server dies?** Requests time out after 30 s of silence, five consecutive failures open the circuit breaker so further requests fail in milliseconds with 503 and Retry-After, cached answers still work, and alerts fire on the share of failed model calls (about 2 minutes in the drill). On Kubernetes the watchdog restarts the deployment after three failed canaries, at most twice an hour.
 
@@ -66,4 +66,4 @@ I built a small but complete LLM platform for one use case: answering questions 
 
 **What would you change for production?** Real secrets management (External Secrets or a vault, not a script), Alertmanager routing, kube-state-metrics for OOM alerts, multiple Qdrant replicas, a managed PostgreSQL with retention on the request log, per-tenant rate limits, token-level streaming behind a flag for use cases that accept unvalidated drafts, and GPU nodes with the model server behind the same OpenAI-compatible interface.
 
-**How would you size GPUs for this?** Weights plus KV cache: 36 KiB of KV per token for this model in FP16, so about 6.7 GiB of cache on a T4 holds about 195,000 tokens, roughly 47 requests at the 4,096-token limit. Then measure: throughput against concurrency until it flattens, and keep p95 time to first token under the target. GPU-lab numbers: PENDING.
+**How would you size GPUs for this?** Weights plus KV cache: 36 KiB of KV per token for this model in FP16, so about 6.7 GiB of cache on a T4 holds about 195,000 tokens, roughly 47 requests at the 4,096-token limit. Then measure: throughput against concurrency until it flattens, and keep p95 time to first token under the target. GPU lab: the estimate was close (vLLM reported 6.86 GiB = 199,744 tokens), and the cache never passed 21% use: the limit at 32 users was prefill queueing (TTFT p95 17 s on long prompts), not memory.
