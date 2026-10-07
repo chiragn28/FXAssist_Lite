@@ -18,6 +18,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -35,6 +36,13 @@ from .prompts import prompt_sets
 
 Mode = Literal["kaggle", "colab", "mock"]
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _free_port() -> int:
+    """A port the OS reports as free right now (mock mode only; Kaggle and Colab use 8000)."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
 
 @dataclass
@@ -71,6 +79,8 @@ class LabConfig:
             paths = {
                 "results_dir": ROOT / "results" / "mock" / stamp,
                 "scratch_dir": ROOT / ".lab-scratch",
+                # Locally 8000 may already be taken (the compose gateway uses it): CI-01.
+                "port": _free_port(),
             }
         return cls(mode=mode, **(paths | overrides))
 
