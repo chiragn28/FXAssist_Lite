@@ -23,7 +23,13 @@ from .sources import Source
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = "FXAssistLite/0.1 (educational RAG project; respects robots and site terms)"
+# Wikimedia's User-Agent policy asks automated clients for contact details (a URL or e-mail).
+# On Kaggle (2026-10-07) all 10 Wikipedia documents were missing from the index while the same
+# downloads worked from a home connection; a missing contact URL is the likely cause (the fetch
+# report from that run was not kept, so the HTTP status is unknown).
+USER_AGENT = (
+    "FXAssistLite/0.1 (+https://github.com/chiragn28/FXAssist_Lite; educational RAG project)"
+)
 MAX_BYTES = 25 * 1024 * 1024  # refuse anything larger than 25 MB
 
 

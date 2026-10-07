@@ -14,6 +14,9 @@
 #   REPO_URL               repo the notebook clones (default: the `github` git remote)
 #   FXA_KAGGLE_MACHINE     NvidiaTeslaT4 = GPU T4 x2 (default). Use "" for Kaggle's default GPU.
 #   FXA_KAGGLE_SLUG        kernel name (default fxassist-gpu-lab)
+#   FXA_LAB_MAX_PRIORITY, FXA_LAB_RUN_EVAL, FXA_LAB_RUN_OOM_DRILL
+#                          override the notebook parameters of the same name, e.g. an eval-only
+#                          rerun: FXA_LAB_MAX_PRIORITY=0 FXA_LAB_RUN_OOM_DRILL=False make lab-push
 
 set -euo pipefail
 
@@ -67,18 +70,34 @@ cmd_push() {
     fi
     rm -rf "$BUILD" && mkdir -p "$BUILD"
     python3 - "$ROOT/notebooks/fxassist_gpu_lab.ipynb" "$BUILD/fxassist_gpu_lab.ipynb" "$repo" <<'PY'
-import json, re, sys
+import json, os, re, sys
 src, dst, repo = sys.argv[1:]
 nb = json.load(open(src))
-hits = 0
+params = {"REPO_URL": f'"{repo}"'}
+for name in ("MAX_PRIORITY", "RUN_EVAL", "RUN_OOM_DRILL"):
+    value = os.environ.get(f"FXA_LAB_{name}")
+    if value:
+        if not re.fullmatch(r"\d+|True|False", value):
+            sys.exit(f"FXA_LAB_{name} must be a number, True or False (got {value!r})")
+        params[name] = value
+hits = {name: 0 for name in params}
 for cell in nb["cells"]:
     text = "".join(cell["source"])
-    new = re.sub(r'^REPO_URL = "[^"]*"', f'REPO_URL = "{repo}"', text, flags=re.M)
+    new = text
+    for name, value in params.items():
+        new, n = re.subn(
+            rf"^({name} = )[^#\n]*?(\s*#.*)?$",
+            lambda m: f"{m.group(1)}{value}{m.group(2) or ''}",  # keep the trailing comment
+            new,
+            flags=re.M,
+        )
+        hits[name] += n
     if new != text:
-        hits += 1
         cell["source"] = new.splitlines(keepends=True)
-if hits != 1:
-    sys.exit(f"expected one REPO_URL line in the parameters cell, found {hits}")
+bad = {k: v for k, v in hits.items() if v != 1}
+if bad:
+    sys.exit(f"expected each parameter once in the parameters cell, found {bad}")
+print("notebook parameters:", ", ".join(f"{k}={v}" for k, v in params.items()))
 json.dump(nb, open(dst, "w"), indent=1)
 PY
     python3 - "$BUILD/kernel-metadata.json" "$(kernel_id)" "$MACHINE" <<'PY'
@@ -111,14 +130,16 @@ cmd_status() {
 }
 
 cmd_pull() {
-    local dest="$ROOT/results/raw/$(date +%Y%m%d)"
+    # One folder per download, so a later (e.g. eval-only) run never overwrites an earlier one.
+    local stamp; stamp="$(date +%Y%m%d-%H%M)"
+    local dest="$ROOT/results/raw/$stamp"
     mkdir -p "$dest"
     "${KAGGLE[@]}" kernels output "$(kernel_id)" -p "$dest" --force
     if [[ -f "$dest/fxassist_results.zip" && ! -d "$dest/fxassist_results" ]]; then
         (cd "$dest" && python3 -m zipfile -e fxassist_results.zip .)
     fi
     echo "Downloaded to $dest. Next:"
-    echo "  make report RUN=results/raw/$(date +%Y%m%d)/fxassist_results"
+    echo "  make report RUN=results/raw/$stamp/fxassist_results"
 }
 
 case "${1:-}" in

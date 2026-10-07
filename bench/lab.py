@@ -639,9 +639,27 @@ def run_eval(cfg: LabConfig, variant: str, repo_dir: Path) -> dict[str, Any]:
         shutil.copytree(runs[-1], target, dirs_exist_ok=True)
     (target / "stdout.txt").parent.mkdir(parents=True, exist_ok=True)
     (target / "stdout.txt").write_text(out.stdout[-20000:])
-    return record(
-        cfg, f"eval {variant}", "ok" if out.returncode == 0 else "failed", run_dir=str(target)
-    )
+    # Keep the corpus evidence: the first GPU run lost every Wikipedia document without a trace.
+    (target / "ingest-stdout.txt").write_text(ingest.stdout[-20000:])
+    for report in (cfg.scratch_dir / "data" / "reports").glob("*.json"):
+        shutil.copy(report, target / report.name)
+    missing = corpus_gaps(target / "fetch-report.json", target / "ingest-report.json")
+    status = "failed" if out.returncode != 0 else "corpus-incomplete" if missing else "ok"
+    return record(cfg, f"eval {variant}", status, run_dir=str(target), missing_documents=missing)
+
+
+def corpus_gaps(fetch_report: Path, ingest_report: Path) -> list[str]:
+    """Documents that failed to download or produced no chunks, as 'id: reason'."""
+    gaps = []
+    if fetch_report.exists():
+        for r in json.loads(fetch_report.read_text()).get("results", []):
+            if r.get("status") == "failed":
+                gaps.append(f"{r['source_id']}: fetch {r.get('error')}")
+    if ingest_report.exists():
+        for d in json.loads(ingest_report.read_text()).get("docs", []):
+            if d.get("status") != "ingested":
+                gaps.append(f"{d['source_id']}: {d.get('status')}")
+    return gaps
 
 
 # --- 10. Package for download ------------------------------------------------------------------

@@ -17,8 +17,9 @@ from dataclasses import dataclass, field
 
 _CITATION_GROUP = re.compile(r"\[\s*(S\d+(?:\s*[,;]\s*S\d+)*)\s*\]")
 _LABEL = re.compile(r"S\d+")
-# 30:1, 1,000, 2.5, 50%, 2018 ... (but not the digits inside citation labels, removed first)
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)*(?:\s*:\s*\d+)?\s*%?")
+# 30:1, 1,000, 2.5, 50%, 2018 ... (but not the digits inside citation labels, removed first).
+# Digits glued to letters or after a slash are identifiers, not quantities: "PS19/18", "ES1".
+_NUMBER = re.compile(r"(?<![\w/])\d+(?:[.,]\d+)*(?:\s*:\s*\d+)?\s*%?")
 
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=\S)")
@@ -77,8 +78,34 @@ def _numbers(text: str) -> set[str]:
     return {_norm_number(m.group()) for m in _NUMBER.finditer(text) if m.group().strip()}
 
 
+_WRAPPED = re.compile(r"\[\s*(S\d+)\s*\](.+?)\[\s*/\s*\1\s*\]", re.S)
+_WORDY = re.compile(
+    r"\[\s*(?:according to|source:?|sources:?|see|from|per|ref(?:erence)?:?|citing)\s+"
+    r"(S\d+(?:\s*(?:,|;|and)\s*S\d+)*)\s*\]",
+    re.I,
+)
+_PARENS = re.compile(r"\(\s*(S\d+(?:\s*[,;]\s*S\d+)*)\s*\)")
+_BRACKETED_VALUE = re.compile(r"\[\s*(\d[^\[\]]{0,30})\s*\]")
+
+
+def normalise_citations(answer: str) -> str:
+    """Rewrite unambiguous citation variants into the canonical `[S1]` form (LLM-07).
+
+    The same model family emits different citation styles behind different servers: Ollama's
+    4-bit build used `[S1]`; vLLM's FP16/AWQ builds on the GPU lab (2026-10-07) also wrote
+    `[According to S1]`, `[S1]text[/S1]`, `(S1)` and wrapped values like `[30:1]` in brackets.
+    Garbled labels such as `[ES1]` or `[1]` are NOT guessed at: the claim stays uncited.
+    """
+    answer = _WRAPPED.sub(lambda m: f"{m.group(2).strip()} [{m.group(1)}]", answer)
+    answer = _WORDY.sub(lambda m: "[" + re.sub(r"\s*(?:;|and)\s*", ", ", m.group(1)) + "]", answer)
+    answer = _PARENS.sub(r"[\1]", answer)
+    # "[30:1]", "[23 May 2027]": a value in brackets, not a citation; keep the value.
+    return _BRACKETED_VALUE.sub(r"\1", answer)
+
+
 def validate(answer: str, excerpts: dict[str, str]) -> Validation:
     """`excerpts` maps label (S1, S2, ...) to the excerpt text given to the model."""
+    answer = normalise_citations(answer)
     result = Validation(answer=answer)
     cited: list[str] = []
 

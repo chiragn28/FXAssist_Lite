@@ -367,3 +367,35 @@ def test_run_sync_works_inside_a_running_event_loop() -> None:
 
     assert run_sync(answer()) == 42  # plain script
     assert asyncio.run(notebook_cell()) == 42  # inside a running loop
+
+
+def test_corpus_gaps_lists_failed_fetches_and_skipped_documents(tmp_path) -> None:
+    """The first GPU run lost all Wikipedia documents silently; gaps must now be reported."""
+    import json
+
+    from bench.lab import corpus_gaps
+
+    fetch = tmp_path / "fetch-report.json"
+    fetch.write_text(
+        json.dumps(
+            {
+                "results": [
+                    {"source_id": "wiki-a", "status": "failed", "error": "HTTP 403"},
+                    {"source_id": "esma-b", "status": "downloaded"},
+                ]
+            }
+        )
+    )
+    ingest = tmp_path / "ingest-report.json"
+    ingest.write_text(
+        json.dumps(
+            {
+                "docs": [
+                    {"source_id": "wiki-a", "status": "missing"},
+                    {"source_id": "esma-b", "status": "ingested"},
+                ]
+            }
+        )
+    )
+    assert corpus_gaps(fetch, ingest) == ["wiki-a: fetch HTTP 403", "wiki-a: missing"]
+    assert corpus_gaps(tmp_path / "none.json", tmp_path / "none2.json") == []

@@ -435,3 +435,57 @@ def test_llm_client_sends_json_mode_and_parses_content() -> None:
 def test_llm_client_raises_on_bad_responses(response) -> None:
     with pytest.raises(LLMError):
         _client(lambda r: response).complete([], max_tokens=5)
+
+
+# --- LLM-07: citation styles seen from vLLM on the GPU lab (2026-10-07) ----------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            "[According to S1] ASIC allows a leverage ratio of [2:1].",
+            "[S1] ASIC allows a leverage ratio of 2:1.",
+        ),
+        (
+            "including [S1]trading credits and rebates[/S1].",
+            "including trading credits and rebates [S1].",
+        ),
+        ("Limits apply (S2).", "Limits apply [S2]."),
+        ("[Source: S1, S3] Limits apply.", "[S1, S3] Limits apply."),
+        ("until [23 May 2027] [S1].", "until 23 May 2027 [S1]."),
+    ],
+)
+def test_llm07_unambiguous_citation_variants_are_normalised(raw, expected) -> None:
+    from fxassist_agent.citations import normalise_citations
+
+    assert normalise_citations(raw) == expected
+
+
+def test_llm07_real_vllm_answer_is_now_accepted() -> None:
+    excerpts = {"S1": "- 2:1 for CFDs referencing crypto-assets"}
+    check = validate(
+        "[According to S1] For CFDs referencing crypto-assets, ASIC allows a leverage ratio of [2:1].",
+        excerpts,
+    )
+    assert check.ok, check.reason
+    assert check.cited == ["S1"] and "2:1" in check.answer
+
+
+def test_llm07_garbled_label_is_not_guessed() -> None:
+    # "[ES1]" might mean S1, but guessing would attach a claim to a source it may not come from.
+    excerpts = {
+        "S1": "Leverage on major pairs is limited to 30:1.",
+        "S2": "Major pairs include USD and EUR.",
+    }
+    check = validate(
+        "[ES1] ESMA sets a limit of 30:1 for major pairs. [S2] Major pairs include USD and EUR.",
+        excerpts,
+    )
+    assert not check.ok and "30:1" in check.reason
+
+
+def test_saf03_identifier_digits_are_not_claimed_numbers() -> None:
+    excerpts = {"S1": "The FCA published its rules in a policy statement."}
+    check = validate("The FCA set these rules in PS19/18 [S1].", excerpts)
+    assert check.ok, check.reason
