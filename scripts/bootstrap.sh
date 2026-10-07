@@ -142,7 +142,9 @@ if has uv; then
     if uv python find 3.11 >/dev/null 2>&1; then
         ok "Python 3.11 available to uv"
     else
-        miss "Python 3.11 not found by uv" "uv python install 3.11"
+        # Not a blocker: `make install` (uv sync) downloads a managed Python 3.11 by itself.
+        # Found on the first GitHub Actions run: a clean runner has none until then.
+        warn "Python 3.11 not installed yet (make install downloads it)" "make install   # or: uv python install 3.11"
     fi
 else
     miss "uv (Python version and dependency manager, ADR-021)" \
