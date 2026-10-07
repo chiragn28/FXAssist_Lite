@@ -196,18 +196,31 @@ def venv_python(cfg: LabConfig, name: str) -> Path:
     return cfg.scratch_dir / name / "bin" / "python"
 
 
+def uv_command() -> list[str]:
+    """uv run from the notebook's own Python, installed on first use.
+
+    uv creates virtualenvs without `ensurepip`, which the Kaggle image (Python 3.13) lacks:
+    the first real run failed at `python -m venv` (2026-10-07).
+    """
+    if shutil.which("uv"):
+        return ["uv"]
+    uv = [sys.executable, "-m", "uv"]
+    if run([*uv, "--version"]).returncode != 0:
+        out = run([sys.executable, "-m", "pip", "install", "-q", "uv"], timeout=600)
+        if out.returncode != 0:
+            raise RuntimeError(f"installing uv failed:\n{out.stderr[-2000:]}")
+    return uv
+
+
 def make_venv(cfg: LabConfig, name: str, packages: list[str], timeout: float = 1800) -> Path:
     """A fresh virtualenv, so the notebook's preinstalled packages cannot clash (GPU-04)."""
     python = venv_python(cfg, name)
+    uv = uv_command()
     if not python.exists():
-        out = run([sys.executable, "-m", "venv", str(cfg.scratch_dir / name)])
+        out = run([*uv, "venv", "--python", sys.executable, str(cfg.scratch_dir / name)])
         if out.returncode != 0:
-            raise RuntimeError(out.stderr)
-    run([str(python), "-m", "pip", "install", "-q", "--upgrade", "pip", "uv"], timeout=600)
-    out = run(
-        [str(python), "-m", "uv", "pip", "install", "--python", str(python), *packages],
-        timeout=timeout,
-    )
+            raise RuntimeError(f"creating {name} failed:\n{out.stderr[-2000:]}")
+    out = run([*uv, "pip", "install", "--python", str(python), *packages], timeout=timeout)
     if out.returncode != 0:
         raise RuntimeError(f"installing {packages} failed:\n{out.stderr[-2000:]}")
     return python
