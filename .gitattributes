@@ -21,3 +21,7 @@ Dockerfile* text eol=lf
 *.gif  binary
 *.pdf  binary
 *.parquet binary
+
+# Archives of GPU-lab output (results/raw/): never converted.
+*.gz        binary
+*.zip       binary

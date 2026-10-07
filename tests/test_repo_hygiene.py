@@ -8,7 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 
-BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".parquet"}
+BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".parquet", ".gz", ".zip"}
 
 
 def tracked_files() -> list[Path]:
