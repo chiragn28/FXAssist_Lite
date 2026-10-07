@@ -36,7 +36,7 @@ jobs:
         with:
           fetch-depth: 0 # gitleaks scans every commit, not just the latest
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0 # exact tag: setup-uv publishes no floating major tags
 
       - name: Bootstrap check on a clean runner (ENV-05)
         run: make bootstrap PHASE=0
@@ -92,7 +92,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0 # exact tag: setup-uv publishes no floating major tags
 
       - name: Build images (multi-stage, non-root)
         run: make images
@@ -128,7 +128,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0 # exact tag: setup-uv publishes no floating major tags
 
       - name: Install kind, kubectl and Helm (checksums verified)
         run: |

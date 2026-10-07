@@ -64,3 +64,10 @@ def test_ci04_images_are_built_budgeted_and_scanned() -> None:
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "make images" in ci and "make image-budget" in ci
     assert "--exit-code 0" in ci  # vulnerability scan reports, does not block (SAF-08)
+
+
+def test_actions_are_pinned_to_tags_that_exist() -> None:
+    """setup-uv has no floating major tag: `@v10` broke the first GitHub run (2026-10-07)."""
+    for path in WORKFLOWS:
+        for ref in re.findall(r"uses: astral-sh/setup-uv@(\S+)", path.read_text()):
+            assert re.fullmatch(r"v\d+\.\d+\.\d+", ref), f"{path.name}: setup-uv@{ref}"
