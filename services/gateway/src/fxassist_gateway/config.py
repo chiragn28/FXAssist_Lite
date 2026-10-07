@@ -42,6 +42,16 @@ class GatewaySettings(Settings):
     rate_limit_burst: int = 10
     rate_limit_fallback_divisor: int = 4  # in-memory limit when Redis is down is 4x stricter
 
+    # --- Web page and image text (ADR-027) ---
+    ui_enabled: bool = True
+    ocr_enabled: bool = True
+    ocr_command: str = "tesseract"
+    ocr_max_bytes: int = 5_000_000
+    ocr_max_pixels: int = 20_000_000  # checked before decoding (no decompression bombs)
+    ocr_max_chars: int = 900  # leaves room for the user's own words in a 1000-character question
+    ocr_timeout_s: float = 20.0
+    ocr_concurrency: int = 2  # OCR is CPU work in the gateway: at most this many at once
+
     # --- Cache (ADR-010, CAC-03) ---
     cache_enabled: bool = True
     cache_ttl_s: int = 3600

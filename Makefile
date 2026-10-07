@@ -152,7 +152,7 @@ dashboard: ## Regenerate the Grafana dashboard JSON from its spec
 	uv run python observability/grafana/build_dashboard.py
 
 ##@ Containers and Kubernetes (Phase 4)
-IMAGE_TAG := 0.4.0
+IMAGE_TAG := 0.5.0
 APP_IMAGES := fxassist/gateway:$(IMAGE_TAG) fxassist/mock-llm:$(IMAGE_TAG) fxassist/watchdog:$(IMAGE_TAG)
 STORE_IMAGES := qdrant/qdrant:v1.19.2-unprivileged redis:8.8.3 postgres:18.6
 KIND_CLUSTER := fxassist

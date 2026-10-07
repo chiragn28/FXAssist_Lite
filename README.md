@@ -92,6 +92,9 @@ make eval           # evaluation set against the local model
 make down
 ```
 
+### Web page
+
+With the stack running (`make up`), open **http://localhost:8000/**. Create a key with `make api-key NAME=you` and paste it into the page (it stays in that browser tab; new keys work within 30 s). Ask a question, or attach a screenshot (button, paste or drag and drop): the text in it is read on the server with Tesseract, shown to you for editing, and sent with your question. The answer still comes only from the documents, with sources, and the same safety checks apply to text from images (ADR-027). Numbers in a screenshot are never accepted as facts, so with the small local model, questions about a screenshot are often answered cautiously or not at all.
 ### Kubernetes (kind)
 
 ```bash

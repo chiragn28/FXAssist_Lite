@@ -6,9 +6,9 @@
 secretName: fxassist-secrets
 
 images:
-  gateway: fxassist/gateway:0.4.0
-  mockLlm: fxassist/mock-llm:0.4.0
-  watchdog: fxassist/watchdog:0.4.0
+  gateway: fxassist/gateway:0.5.0
+  mockLlm: fxassist/mock-llm:0.5.0
+  watchdog: fxassist/watchdog:0.5.0
   qdrant: qdrant/qdrant:v1.19.2-unprivileged
   redis: redis:8.8.3
   postgres: postgres:18.6

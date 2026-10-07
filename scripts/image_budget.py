@@ -17,9 +17,12 @@ import sys
 # image -> (budget in MB, what dominates its size)
 BUDGETS = {
     # measured 2026-10-07: 234 MB, 51 MB, 47 MB
-    "fxassist/gateway:0.4.0": (270, "ONNX Runtime, NumPy, the agent, the baked embedding model"),
-    "fxassist/mock-llm:0.4.0": (60, "Python base, FastAPI, uvicorn"),
-    "fxassist/watchdog:0.4.0": (55, "Python base, httpx"),
+    "fxassist/gateway:0.5.0": (
+        320,
+        "ONNX Runtime, NumPy, the agent, the baked embedding model, Tesseract OCR",
+    ),
+    "fxassist/mock-llm:0.5.0": (60, "Python base, FastAPI, uvicorn"),
+    "fxassist/watchdog:0.5.0": (55, "Python base, httpx"),
 }
 
 

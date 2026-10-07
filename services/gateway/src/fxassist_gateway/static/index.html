@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FXAssist Lite</title>
+  <link rel="stylesheet" href="/ui/style.css">
+  <script src="/ui/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">FX</span>
+      <div>
+        <h1>FXAssist Lite</h1>
+        <p class="sub">Answers about forex and CFD rules, from regulators' documents, with sources</p>
+      </div>
+    </div>
+    <button id="key-button" class="ghost" type="button" aria-haspopup="dialog">API key</button>
+  </header>
+
+  <main>
+    <section id="chat" class="chat" aria-live="polite">
+      <div id="welcome" class="welcome">
+        <h2>Ask a question</h2>
+        <p>Every answer is checked against the cited excerpts before you see it. No personal trading advice.</p>
+        <div class="examples">
+          <button type="button" class="example">What leverage limits apply to retail CFD clients in the EU?</button>
+          <button type="button" class="example">What is negative balance protection?</button>
+          <button type="button" class="example">What is a margin call?</button>
+          <button type="button" class="example">What share of retail CFD accounts lose money?</button>
+        </div>
+        <p class="hint">You can attach a screenshot (for example a broker's terms): the text in it is read and sent with your question.</p>
+      </div>
+    </section>
+
+    <form id="ask-form" class="composer" autocomplete="off">
+      <div id="attachment" class="attachment" hidden>
+        <img id="attachment-thumb" alt="Attached image">
+        <div class="attachment-body">
+          <div class="attachment-head">
+            <span id="attachment-status">Reading text from the image…</span>
+            <button id="attachment-remove" type="button" class="ghost small">Remove</button>
+          </div>
+          <label for="ocr-text" class="visually-hidden">Text read from the image</label>
+          <textarea id="ocr-text" rows="3" placeholder="Text from the image appears here. You can edit it before sending." hidden></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <label for="image-input" class="attach ghost" title="Attach an image (PNG, JPEG or WebP)">
+          <span aria-hidden="true">+</span><span class="visually-hidden">Attach an image</span>
+        </label>
+        <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+        <label for="question" class="visually-hidden">Your question</label>
+        <textarea id="question" rows="1" maxlength="1000" placeholder="Ask about leverage limits, margin, CFD rules…"></textarea>
+        <button id="send" type="submit" class="primary">Ask</button>
+      </div>
+      <p id="composer-note" class="note"></p>
+    </form>
+  </main>
+
+  <dialog id="key-dialog">
+    <form method="dialog" id="key-form">
+      <h2>API key</h2>
+      <p>Create one with <code>make api-key NAME=you</code>. It is kept in this browser tab only and sent to this server only.</p>
+      <label for="key-input">Key</label>
+      <input id="key-input" type="password" placeholder="fxa_…" autocomplete="off" spellcheck="false">
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost" type="submit">Cancel</button>
+        <button value="save" class="primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="message-template">
+    <article class="message">
+      <div class="bubble"></div>
+    </article>
+  </template>
+</body>
+</html>

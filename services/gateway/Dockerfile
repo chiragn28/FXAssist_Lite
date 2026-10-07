@@ -33,6 +33,10 @@ FROM python:3.11.17-slim-trixie
 # HIGH CVEs in their vendored copies (CVE-2026-23949, CVE-2026-24049; Trivy, 2026-10-07).
 RUN python -m pip uninstall -y -q setuptools wheel pip \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app
+# OCR for images on the web page (ADR-027): Debian trixie's Tesseract 5.5.0 with English only.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build --chown=10001:10001 /app /app
 # The corpus registry, for the ingestion Job on Kubernetes (`fxassist ingest`).
 COPY --chown=10001:10001 data/sources.yaml /app/data/sources.yaml

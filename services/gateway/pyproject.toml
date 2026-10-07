@@ -10,6 +10,7 @@ dependencies = [
     "uvicorn>=0.54.0",
     "redis>=8.1.0",                     # cache and rate limit (ADR-010)
     "psycopg[binary,pool]>=3.3.6",      # API keys and request log (ADR-011)
+    "pillow>=12.3.0",                   # image checks before OCR (ADR-027)
     "opentelemetry-api>=1.45.1",        # metrics and traces (ADR-012)
     "opentelemetry-sdk>=1.45.1",
     "opentelemetry-exporter-prometheus>=0.66b1",       # /metrics for Prometheus (OBS-04)

@@ -24,10 +24,11 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, Status, StatusCode
@@ -49,6 +50,7 @@ from .errors import ApiError, from_agent_error
 from .health import CachedProbe, Check, Readiness
 from .logwriter import LogStore, RequestLogWriter
 from .middleware import RequestContextMiddleware, RequestIdFilter
+from .ocr import OcrError, TesseractOcr, clean, prepare
 from .redis_state import AnswerCache, RateLimiter, RedisGuard
 from .runner import AgentRunner, Flight, Flights, RunOutcome
 from .sse import KEEPALIVE, EventStreamResponse, event
@@ -81,18 +83,22 @@ class AskRequest(BaseModel):
         return value
 
 
-async def read_ask_request(request: Request, settings: GatewaySettings) -> AskRequest:
-    too_large = ApiError(
-        413, "payload_too_large", f"Request body is larger than {settings.max_body_bytes} bytes."
-    )
+async def read_body(request: Request, limit: int) -> bytes:
+    """The request body, refused as soon as it is larger than `limit` (API-03)."""
+    too_large = ApiError(413, "payload_too_large", f"Request body is larger than {limit} bytes.")
     declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > settings.max_body_bytes:
+    if declared.isdigit() and int(declared) > limit:
         raise too_large
     body = bytearray()
     async for chunk in request.stream():
         body += chunk
-        if len(body) > settings.max_body_bytes:
+        if len(body) > limit:
             raise too_large
+    return bytes(body)
+
+
+async def read_ask_request(request: Request, settings: GatewaySettings) -> AskRequest:
+    body = await read_body(request, settings.max_body_bytes)
     try:
         data = json.loads(body.decode("utf-8"))
     except UnicodeDecodeError:
@@ -358,7 +364,13 @@ def response_body(
 class RequestRecord:
     """Everything known about one request, written to the request log at the end."""
 
-    def __init__(self, request_id: str, route: str, settings: GatewaySettings):
+    def __init__(
+        self,
+        request_id: str,
+        route: str,
+        settings: GatewaySettings,
+        span_name: str = "fxassist.ask",
+    ):
         self.started = time.monotonic()
         self.settings = settings
         self.fields: dict[str, Any] = {
@@ -373,7 +385,7 @@ class RequestRecord:
         # run happens in another task and then a worker thread.
         # FastAPI (0.142+) already emits its own HTTP server span; this one carries the
         # FXAssist view of the request (outcome, cache, coalescing) and parents the agent spans.
-        self.span = tracer.start_span("fxassist.ask", kind=SpanKind.INTERNAL)
+        self.span = tracer.start_span(span_name, kind=SpanKind.INTERNAL)
         self.span.set_attribute("fxa.request_id", request_id)
         self.trace_context = trace.set_span_in_context(self.span)
         self._finished = False
@@ -477,6 +489,9 @@ def create_app(
             err.body(request.scope.get("state", {}).get("request_id")), status_code=500
         )
 
+    if settings.ui_enabled:
+        add_ui_routes(app)
+
     @app.get("/healthz")
     async def healthz() -> dict:
         return {"status": "ok"}
@@ -539,6 +554,49 @@ def create_app(
             "rate_limit_per_minute": settings.rate_limit_per_minute,
         }
 
+    ocr_engine = TesseractOcr(binary=settings.ocr_command, timeout_s=settings.ocr_timeout_s)
+    ocr_slots = asyncio.Semaphore(settings.ocr_concurrency)
+
+    @app.post("/v1/ocr")
+    async def ocr(request: Request) -> dict:
+        """ADR-027: the text in an image (raw PNG, JPEG or WebP body), for the web page."""
+        c: Components = request.app.state.c
+        request_id: str = request.scope["state"]["request_id"]
+        record = RequestRecord(request_id, "/v1/ocr", settings, span_name="fxassist.ocr")
+        try:
+            key = c.auth.verify(presented_key(request.headers))
+            record.fields["key_id"] = key.key_id
+            if not settings.ocr_enabled or not ocr_engine.available():
+                raise ApiError(503, "ocr_unavailable", "Reading images is not available here.")
+            decision = await c.limiter.check(key.key_id)  # an image counts like a question
+            if not decision.allowed:
+                raise ApiError(
+                    429,
+                    "rate_limited",
+                    "Too many requests for this API key.",
+                    retry_after=decision.retry_after,
+                )
+            data = await read_body(request, settings.ocr_max_bytes)
+            try:
+                png = prepare(
+                    data,
+                    request.headers.get("content-type", ""),
+                    max_pixels=settings.ocr_max_pixels,
+                )
+                async with ocr_slots:
+                    raw = await asyncio.to_thread(ocr_engine.read, png)
+            except OcrError as err:
+                status = {"unsupported_media_type": 415, "ocr_timeout": 503}.get(err.code, 422)
+                raise ApiError(status, err.code, err.message) from None
+            text, truncated = clean(raw, max_chars=settings.ocr_max_chars)
+            record.fields.update(status=200, outcome="text" if text else "no_text")
+            return {"request_id": request_id, "text": text, "truncated": truncated}
+        except ApiError as err:
+            record.error(err)
+            raise
+        finally:
+            record.finish(c.logs)
+
     @app.post("/v1/ask")
     async def ask(request: Request):
         c: Components = request.app.state.c
@@ -594,6 +652,43 @@ def create_app(
                 record.finish(c.logs)
 
     return app
+
+
+# --- The web page (ADR-027) ------------------------------------------------------------------
+
+STATIC_DIR = Path(__file__).parent / "static"
+UI_FILES = {"app.js": "text/javascript", "style.css": "text/css"}
+# The page loads only its own files and talks only to this gateway. Model text is inserted with
+# textContent, never as HTML; the policy is a second line of defence (SAF-09).
+UI_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
+        "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-cache",
+}
+
+
+def add_ui_routes(app: FastAPI) -> None:
+    @app.get("/", include_in_schema=False)
+    async def index() -> Response:
+        return Response(
+            (STATIC_DIR / "index.html").read_bytes(),
+            media_type="text/html; charset=utf-8",
+            headers=UI_HEADERS,
+        )
+
+    @app.get("/ui/{name}", include_in_schema=False)
+    async def ui_file(name: str) -> Response:
+        if name not in UI_FILES:  # a fixed list: no paths from the URL reach the filesystem
+            raise ApiError(404, "not_found", "Not found.")
+        return Response(
+            (STATIC_DIR / name).read_bytes(),
+            media_type=f"{UI_FILES[name]}; charset=utf-8",
+            headers=UI_HEADERS,
+        )
 
 
 def make_compute(

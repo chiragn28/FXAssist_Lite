@@ -110,7 +110,7 @@ jobs:
           curl -fsSLO "${base}/trivy_${TRIVY_VERSION}_checksums.txt"
           grep " ${tarball}\$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum --check
           tar -xzf "${tarball}" trivy
-          for image in fxassist/gateway:0.4.0 fxassist/mock-llm:0.4.0 fxassist/watchdog:0.4.0; do
+          for image in fxassist/gateway:0.5.0 fxassist/mock-llm:0.5.0 fxassist/watchdog:0.5.0; do
             ./trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
               --exit-code 0 --no-progress --format table "$image" | tee -a trivy-report.txt
           done
