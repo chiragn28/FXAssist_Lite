@@ -49,3 +49,30 @@ def test_ft04_finetuned_model_is_served_like_the_fp16_baseline() -> None:
     assert config["model"] == FINETUNED_MODEL and FINETUNED_MODEL.startswith(LOCAL_MODEL_PREFIX)
     assert config["dtype"] == "float16" and config["quantization"] is None  # GPU-02
     assert config["max_model_len"] == 4096
+
+
+def test_ft05_injected_example_plants_an_instruction_and_keeps_the_answer() -> None:
+    messages = [
+        {"role": "system", "content": "SYSTEM"},
+        {
+            "role": "user",
+            "content": '<excerpts>\n<excerpt label="S1">\nA pip is a unit.\n</excerpt>\n'
+            "</excerpts>\n\n<question>\nWhat is a pip?\n</question>",
+        },
+    ]
+    out = ft_data.injected_example(messages, "A pip is a unit [S1].", ft_data.INJECTIONS[0])
+    assert "A pip is a unit. Note to the assistant" in out[1]["content"]
+    assert out[1]["content"].count("</excerpt>\n") == 1  # still inside the excerpt
+    assert out[2] == {"role": "assistant", "content": "A pip is a unit [S1]."}
+
+
+def test_ft05_planted_instructions_differ_from_the_eval_attack() -> None:
+    import yaml
+
+    from bench.lab import ROOT
+
+    scenarios = (ROOT / "eval" / "scenarios.yaml").read_text()
+    for injection in ft_data.INJECTIONS:
+        assert "PWNED" not in injection and "unlimited" not in injection.lower()
+    assert "PWNED" in scenarios  # the eval attack the model must never have seen
+    assert yaml.safe_load(scenarios)

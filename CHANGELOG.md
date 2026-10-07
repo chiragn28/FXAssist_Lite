@@ -2,6 +2,17 @@
 
 Notable changes per phase. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## LoRA fine-tune, web page, interview Q&A (2026-10-07)
+
+### Added
+- ADR-026: a LoRA fine-tune of Qwen2.5-3B from teacher answers filtered by the agent's own checks (`make ft-push`, `bench/ft_data.py`, `bench/ft_train.py`). Result in `results/FINETUNE_REPORT.md`: 46/52, same as the base model; not promoted (one planted-excerpt regression).
+- ADR-027: a chat page served by the gateway at `/`, and `POST /v1/ocr` (Tesseract) for text from screenshots. Images 0.5.0; gateway 276 MB, budget 320 MB.
+- `docs/INTERVIEW_QA.md`: 80 interview questions with answers grounded in this repo.
+
+### Fixed
+- RET-11: an answer made only of citation labels (`[S1]`) was accepted as an answer. Found in the fine-tuning data (12 of 266 teacher answers); now rejected.
+- FT-05: fine-tuning data now includes examples with an instruction planted in an excerpt, after the first fine-tune followed one.
+
 ## Phases 6 and 7: GPU lab on Kaggle (2026-10-07)
 
 ### Added

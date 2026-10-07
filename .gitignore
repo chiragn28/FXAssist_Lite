@@ -59,3 +59,7 @@ results/mock/
 
 # Built by scripts/kaggle_lab.sh push (notebook copy + kernel metadata)
 .kaggle-kernel/
+
+# Fine-tuning run output: the LoRA adapter (106 MB) and the zip that contains it stay local (ADR-026)
+results/raw/**/lora-adapter.tar.gz
+results/raw/20261007-2223/fxassist_results.zip

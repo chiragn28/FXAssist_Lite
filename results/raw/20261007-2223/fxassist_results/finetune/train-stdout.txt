@@ -1,0 +1,40 @@
+{"t": 1791395738.4, "event": "data", "split": "train", "rows": 549, "kept": 549}
+{"t": 1791395738.5, "event": "data", "split": "val", "rows": 30, "kept": 30}
+{"t": 1791395744.6, "event": "model", "trainable_params": 29933568, "total_params": 3115872256, "torch": "2.13.0+cu130", "gpu": "Tesla T4"}
+{"t": 1791395762.4, "event": "val", "when": "before", "loss": 0.4544}
+{"t": 1791395918.4, "event": "train", "step": 10, "of": 69, "loss": 0.4846, "lr": 9.81771838126524e-05, "minutes": 3.0}
+{"t": 1791396068.2, "event": "train", "step": 20, "of": 69, "loss": 0.3664, "lr": 8.756803171472816e-05, "minutes": 5.5}
+{"t": 1791396226.8, "event": "train", "step": 30, "of": 69, "loss": 0.3588, "lr": 6.9718058349284e-05, "minutes": 8.2}
+{"t": 1791396377.7, "event": "train", "step": 40, "of": 69, "loss": 0.2732, "lr": 4.859583227770218e-05, "minutes": 10.7}
+{"t": 1791396525.2, "event": "train", "step": 50, "of": 69, "loss": 0.2803, "lr": 2.889743906929609e-05, "minutes": 13.1}
+{"t": 1791396677.9, "event": "train", "step": 60, "of": 69, "loss": 0.2611, "lr": 1.5002404810528451e-05, "minutes": 15.7}
+{"t": 1791396825.2, "event": "train", "step": 69, "of": 69, "loss": 0.2041, "lr": 1.0050969736764642e-05, "minutes": 18.1}
+{"t": 1791396842.4, "event": "val", "when": "after", "loss": 0.228, "steps": 69, "planned_steps": 69, "examples_seen": 552, "stopped_by_time_limit": false}
+{"t": 1791396872.3, "event": "saved", "minutes": 18.9}
+
+Error in sitecustomize; set PYTHONVERBOSE for traceback:
+ModuleNotFoundError: No module named 'wrapt'
+
+Loading weights:   0%|          | 0/434 [00:00<?, ?it/s]
+Loading weights:   0%|          | 1/434 [00:00<05:40,  1.27it/s]
+Loading weights:  26%|██▌       | 111/434 [00:00<00:01, 161.77it/s]
+Loading weights:  37%|███▋      | 160/434 [00:01<00:01, 148.95it/s]
+Loading weights:  44%|████▍     | 193/434 [00:01<00:01, 169.21it/s]
+Loading weights:  52%|█████▏    | 224/434 [00:01<00:01, 154.49it/s]
+Loading weights:  57%|█████▋    | 248/434 [00:01<00:01, 150.79it/s]
+Loading weights:  62%|██████▏   | 269/434 [00:01<00:01, 155.52it/s]
+Loading weights:  67%|██████▋   | 291/434 [00:02<00:00, 156.06it/s]
+Loading weights:  71%|███████▏  | 310/434 [00:02<00:00, 162.77it/s]
+Loading weights:  76%|███████▌  | 329/434 [00:02<00:00, 152.43it/s]
+Loading weights:  81%|████████  | 351/434 [00:02<00:00, 156.92it/s]
+Loading weights:  86%|████████▋ | 375/434 [00:02<00:00, 167.62it/s]
+Loading weights:  91%|█████████ | 393/434 [00:02<00:00, 160.07it/s]
+Loading weights:  94%|█████████▍| 410/434 [00:02<00:00, 161.79it/s]
+Loading weights:  98%|█████████▊| 427/434 [00:02<00:00, 152.53it/s]
+Loading weights: 100%|██████████| 434/434 [00:02<00:00, 146.89it/s]
+[W1007 17:58:26.155273011 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 849346560 bytes (free: 835518464, total: 15636037632).
+[W1007 18:00:41.811258092 CUDACachingAllocator.cpp:3933] memory allocation failed with OOM on device 0 while trying to allocate 864026624 bytes (free: 151846912, total: 15636037632).
+
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]
+Writing model shards: 100%|██████████| 1/1 [00:26<00:00, 26.86s/it]
+Writing model shards: 100%|██████████| 1/1 [00:26<00:00, 26.86s/it]

@@ -124,6 +124,11 @@ def validate(answer: str, excerpts: dict[str, str]) -> Validation:
     if not cited:
         result.ok, result.reason = False, "no valid citations"
         return result
+    # RET-11: "[S1]" alone, or "[S2] [S1]", cites something but says nothing. The fine-tuning
+    # teacher produced 12 such answers in 266 (ADR-026), and the student learned to copy them.
+    if not re.search(r"[A-Za-z0-9]", _CITATION_GROUP.sub(" ", cleaned)):
+        result.ok, result.reason = False, "no answer text besides citations"
+        return result
 
     supported = set()
     for label in cited:

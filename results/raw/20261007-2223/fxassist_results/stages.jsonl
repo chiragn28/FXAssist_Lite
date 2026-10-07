@@ -1,0 +1,10 @@
+{"stage": "environment", "status": "ok", "at": "2026-10-07T17:34:47Z", "gpu_count": 2, "note": "2 GPU(s), bf16=False"}
+{"stage": "install-vllm", "status": "ok", "at": "2026-10-07T17:37:11Z", "versions": "0.31.0 2.13.0+cu130 13.0"}
+{"stage": "download Qwen/Qwen2.5-7B-Instruct-AWQ", "status": "ok", "at": "2026-10-07T17:37:31Z", "attempt": 1}
+{"stage": "ft-data", "status": "ok", "at": "2026-10-07T17:54:58Z", "report": {"seed": 0, "teacher": "fxassist-model", "corpus_version": "b49a4f06efe11e68", "chunks_sampled": 450, "questions_generated": 438, "questions_dropped": {"too close to an eval question": 98, "duplicate": 12}, "questions_kept": 328, "agent_outcomes": {"answered": 266, "abstained": 32, "error": 30}, "examples": {"grade": 270, "answer": 266, "negative": 39, "rewrite": 4}, "train_examples": 549, "val_examples": 30, "minutes": 12.9}}
+{"stage": "download Qwen/Qwen2.5-3B-Instruct", "status": "ok", "at": "2026-10-07T17:55:28Z", "attempt": 1}
+{"stage": "ft-train", "status": "ok", "at": "2026-10-07T18:14:38Z", "adapter": "/kaggle/working/fxassist_results/finetune/lora-adapter.tar.gz"}
+{"stage": "eval fp16-lora", "status": "ok", "at": "2026-10-07T18:18:27Z", "run_dir": "/kaggle/working/fxassist_results/eval/fp16-lora", "missing_documents": []}
+{"stage": "download Qwen/Qwen2.5-3B-Instruct", "status": "ok", "at": "2026-10-07T18:18:27Z", "attempt": 1}
+{"stage": "eval fp16", "status": "ok", "at": "2026-10-07T18:22:47Z", "run_dir": "/kaggle/working/fxassist_results/eval/fp16", "missing_documents": []}
+{"stage": "package", "status": "ok", "at": "2026-10-07T18:22:50Z", "zip": "/kaggle/working/fxassist_results.zip", "size_kb": 108320}

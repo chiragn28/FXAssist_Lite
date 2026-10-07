@@ -217,6 +217,16 @@ def test_ret08_answer_with_only_invalid_citations_is_rejected(settings, store, e
     assert result.outcome == "abstained" and "no valid citations" in result.reason
 
 
+@pytest.mark.parametrize("answer", ["[S1]", "[S2] [S1]", "[S1]. [S1]", " [S1] , [S2] "])
+def test_ret11_answer_that_is_only_citations_is_rejected(answer) -> None:
+    check = validate(answer, {"S1": "Limits start at 30:1.", "S2": "Other text."})
+    assert not check.ok and check.reason == "no answer text besides citations"
+
+
+def test_ret11_short_answers_with_content_still_pass() -> None:
+    assert validate("Major pairs: 30:1 [S1].", {"S1": "Major pairs 30:1."}).ok
+
+
 def test_saf03_invented_number_is_rejected(settings, store, embedder) -> None:
     seed(store, ("esma", LEVERAGE))
     llm = FakeLLM(grade=GRADE_ALL, answer="Gold is limited to 20:1 [S1].")

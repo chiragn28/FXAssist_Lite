@@ -371,3 +371,26 @@ Run 2026-10-07 through the Kaggle API (`make lab-push`, `lab-status`, `lab-pull`
 - **A linted workflow is not a working workflow.** actionlint passed, and the first run still failed in "Set up job": `astral-sh/setup-uv@v10` does not exist, because that action publishes only exact tags. I had checked the latest *release*, not that the tag I wrote existed.
 - **"Size" depends on the machine measuring it.** Docker Desktop's containerd store reports compressed image sizes; GitHub's runners report uncompressed ones (589 MB vs 234 MB for the same image). A budget must define its measure in a way every machine agrees on: the gzip size of `docker save` now gives 233 MB on GitHub and 235 MB locally.
 - **A clean machine is cleaner than you think.** The bootstrap check expected Python 3.11 to be present; a fresh runner has none until `uv sync` downloads it. And one job failed on a Docker Hub 502: a re-run, not a code change, was the right response.
+
+---
+
+## After Phase 8: fine-tuning and the web page
+
+### Concepts and decisions
+
+- **Your filter is your label quality.** The fine-tuning data kept only teacher answers that passed the agent's checks, which sounded strict. But 12 of 266 "passing" answers were just `[S1]`: the validator checked citations and numbers, and a bare citation has a valid citation and no numbers. The student learned it and answered five evaluation questions with nothing but `[S1]`. Every blind spot in an automatic filter becomes a behaviour the model learns. The same gap was a production bug (RET-11).
+
+- **Fine-tuning can remove behaviour you never trained for.** 549 clean examples, none containing a planted instruction, were enough to make the model follow one that the base model ignored. Safety behaviour has to be in the training data and in the release gate; a higher average score is not a reason to ship.
+
+- **Same-session baselines.** The base model was re-evaluated in the same session as the fine-tuned one. It matched the morning's run item for item (46/52, same six failures), which is what makes "same score, different failures" a trustworthy finding.
+
+- **Leakage is not hypothetical.** 98 of 438 generated questions were within cosine 0.80 of an evaluation question. Generated data drifts toward the obvious questions, and the obvious questions are the ones in the test set.
+
+- **T4 training needs float16 with care.** No bfloat16: the base stays float16, the adapter weights are float32, the loss is scaled so small gradients do not underflow, and training stops on a time limit. Testing the loop on a laptop GPU with a 0.5B model first cost minutes; a failure on Kaggle would have cost an hour of quota.
+
+- **An image is just more untrusted input.** OCR text is shown to the user and sent as part of the question, so the existing guard, prompt and validator all apply, and an instruction hidden in a screenshot is refused like a typed one. Numbers read from an image are never accepted as cited facts, which keeps a scam broker's "ESMA allows 500:1" from coming back as an answer.
+
+### Interview questions I can now answer
+
+1. *How do you build fine-tuning data without paying for labels?* Use a larger open model as the teacher, run it through the real system so prompts match inference, filter with your own checks, drop anything near the test set, and add negative and adversarial examples. Then inspect what passed: the filter's blind spots become the student's habits.
+2. *Your fine-tuned model scores the same as the base. Ship it?* Compare item by item, not totals. Here three abstentions became correct answers, but five answers became empty and one injection got through. The gate is "no safety regression", so no.

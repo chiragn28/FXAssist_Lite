@@ -1,0 +1,26 @@
+{
+  "seed": 0,
+  "teacher": "fxassist-model",
+  "corpus_version": "b49a4f06efe11e68",
+  "chunks_sampled": 450,
+  "questions_generated": 438,
+  "questions_dropped": {
+    "too close to an eval question": 98,
+    "duplicate": 12
+  },
+  "questions_kept": 328,
+  "agent_outcomes": {
+    "answered": 266,
+    "abstained": 32,
+    "error": 30
+  },
+  "examples": {
+    "grade": 270,
+    "answer": 266,
+    "negative": 39,
+    "rewrite": 4
+  },
+  "train_examples": 549,
+  "val_examples": 30,
+  "minutes": 12.9
+}

@@ -1,0 +1,23 @@
+{
+  "mode": "kaggle",
+  "python": "3.13.15",
+  "platform": "Linux-6.18.48+-x86_64-with-glibc2.39",
+  "gpus": [
+    {
+      "name": "Tesla T4",
+      "memory_mib": 15360,
+      "compute_capability": 7.5
+    },
+    {
+      "name": "Tesla T4",
+      "memory_mib": 15360,
+      "compute_capability": 7.5
+    }
+  ],
+  "gpu_count": 2,
+  "bf16_supported": false,
+  "internet": true,
+  "scratch_free_gb": 1148.8,
+  "cpu_count": 4,
+  "problems": []
+}

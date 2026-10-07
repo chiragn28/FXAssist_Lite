@@ -1,0 +1,213 @@
+{
+  "started_at": "2026-10-07T18:16:23+00:00",
+  "results": [
+    {
+      "source_id": "cftc-eight-things-forex",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/cftc-eight-things-forex.html",
+      "sha256": "bee8dff269d9d726b29de5a6337b5f53004abe60659f2cfc12c1d2885edd3bb8",
+      "bytes": 53897,
+      "error": null
+    },
+    {
+      "source_id": "cftc-nasaa-forex-alert",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/cftc-nasaa-forex-alert.html",
+      "sha256": "f51c4d4a966ee949a834192e0c1b26b3f080d197528ea2efea16646f3fd63f8e",
+      "bytes": 44360,
+      "error": null
+    },
+    {
+      "source_id": "cftc-forex-frauds",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/cftc-forex-frauds.html",
+      "sha256": "01ed6d714063019aa665fd6d03b563863927848f662af3151c8ce7c74cabc96c",
+      "bytes": 47094,
+      "error": null
+    },
+    {
+      "source_id": "cftc-forex-advisory-legacy",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/cftc-forex-advisory-legacy.html",
+      "sha256": "0d9b6386ac2f660b55ad97d8f8cc01a9d72a6e98d40849e65087ecb64c804056",
+      "bytes": 18779,
+      "error": null
+    },
+    {
+      "source_id": "cftc-otc-forex-customer-advisory",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/cftc-otc-forex-customer-advisory.html",
+      "sha256": "c983cb35fe15dcab0219e445e15418dd969ebdf2bfce7097f62fbd4461fefac0",
+      "bytes": 46292,
+      "error": null
+    },
+    {
+      "source_id": "esma-final-measures-news",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/esma-final-measures-news.html",
+      "sha256": "a547bb6d6d8eb4ad7eca9f20c631a0b729025f99e38ee9d235605052bc37aa63",
+      "bytes": 66414,
+      "error": null
+    },
+    {
+      "source_id": "esma-pi-faq",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/esma-pi-faq.pdf",
+      "sha256": "9438c97a84c151c21783e52e20be9ebed97e1fc4f7191c184235767e960cd34c",
+      "bytes": 399304,
+      "error": null
+    },
+    {
+      "source_id": "esma-pi-press-release",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/esma-pi-press-release.pdf",
+      "sha256": "b5f944a6cc0253e6a4a2856c90d74bf78f3b66ce75523ee884ddeb80655d874f",
+      "bytes": 241599,
+      "error": null
+    },
+    {
+      "source_id": "esma-pi-additional-info",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/esma-pi-additional-info.pdf",
+      "sha256": "f9997c7068e4fb0f07b70b94436b96f1bf6551d3e11884414f362c2243300bb8",
+      "bytes": 206861,
+      "error": null
+    },
+    {
+      "source_id": "asic-rg227",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/asic-rg227.pdf",
+      "sha256": "1caa0cf400be912569cf1b6c574585998f8f55fe9614c3921cd3d19daecd20b1",
+      "bytes": 676755,
+      "error": null
+    },
+    {
+      "source_id": "asic-rep205",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/asic-rep205.pdf",
+      "sha256": "236a4ee9eab084f7bbfd17fd04bfa5d77e40aad0ae7b16cf31f9d9a512f9af03",
+      "bytes": 376250,
+      "error": null
+    },
+    {
+      "source_id": "asic-20-254mr",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/asic-20-254mr.html",
+      "sha256": "612da2d433d51e9d7e39281840ff222b8a841baa7d28112b4cf9ea0a4d764135",
+      "bytes": 24113,
+      "error": null
+    },
+    {
+      "source_id": "asic-22-082mr",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/asic-22-082mr.html",
+      "sha256": "102504619236aee14a34bb50346625b5a89448f805b0ee79e54fb63f7a53bdc9",
+      "bytes": 19769,
+      "error": null
+    },
+    {
+      "source_id": "asic-read-before-cfds",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/asic-read-before-cfds.html",
+      "sha256": "ab96d6ac53b18e7ed27994059591a18d7fdfc6821d946aff70ffe4e8afb69107",
+      "bytes": 18808,
+      "error": null
+    },
+    {
+      "source_id": "fca-ps19-18",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/fca-ps19-18.pdf",
+      "sha256": "5bad5547584a50af0b593e1f46d46458e86df640eb66a9a1968da01864edbab5",
+      "bytes": 594175,
+      "error": null
+    },
+    {
+      "source_id": "fca-cfd-permanent-restrictions",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/fca-cfd-permanent-restrictions.html",
+      "sha256": "e0cea6fcdd73c802f0a5164c27364bd8ee1144a5eaa0291bfbf3f23d8a12b0af",
+      "bytes": 175389,
+      "error": null
+    },
+    {
+      "source_id": "wiki-foreign-exchange-market",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-foreign-exchange-market.json",
+      "sha256": "6b008b4f971e61e64ad5925fe7b84226bc4da0d3c6a71c0f39c1e06b1aafb4ec",
+      "bytes": 42449,
+      "error": null
+    },
+    {
+      "source_id": "wiki-contract-for-difference",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-contract-for-difference.json",
+      "sha256": "94c0b78f7058d37c73dee0660cad2b99b8e2251587e9dcf3f00f8baff60f6860",
+      "bytes": 26081,
+      "error": null
+    },
+    {
+      "source_id": "wiki-margin-finance",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-margin-finance.json",
+      "sha256": "1851346f5badd025e15e4faec053a836358d87bd490e354c2d211e976ed616c6",
+      "bytes": 16770,
+      "error": null
+    },
+    {
+      "source_id": "wiki-leverage-finance",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-leverage-finance.json",
+      "sha256": "ecf6dd879404f51454c70d2be7d1a16567b5db16989aa03b6228c3477093e805",
+      "bytes": 15982,
+      "error": null
+    },
+    {
+      "source_id": "wiki-percentage-in-point",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-percentage-in-point.json",
+      "sha256": "4952f442e7e8dca3057d860fcba8d63db06b30d5a3dc312da50742a19b4dbc16",
+      "bytes": 3081,
+      "error": null
+    },
+    {
+      "source_id": "wiki-currency-pair",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-currency-pair.json",
+      "sha256": "8fda5b271e7dad2e1ab2648a645bebb0f11dd1a5d28590e5a2eb9522c9e2c740",
+      "bytes": 9183,
+      "error": null
+    },
+    {
+      "source_id": "wiki-bid-ask-spread",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-bid-ask-spread.json",
+      "sha256": "2978089da4db914de5e22100537949936f8725fdae9e773ad078ea15c2b7fa99",
+      "bytes": 8037,
+      "error": null
+    },
+    {
+      "source_id": "wiki-retail-forex",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-retail-forex.json",
+      "sha256": "c5583d73c0cdaea1be297e7915581fd297a02a368c91d1020c005d5eb4959eb0",
+      "bytes": 6857,
+      "error": null
+    },
+    {
+      "source_id": "wiki-carry-investment",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-carry-investment.json",
+      "sha256": "0112c15dd4ed0d1e9ac2f75686cb90319418f471005d95b488bb7d5f47fcdcf5",
+      "bytes": 7344,
+      "error": null
+    },
+    {
+      "source_id": "wiki-foreign-exchange-spot",
+      "status": "cached",
+      "path": "/kaggle/tmp/data/raw/wiki-foreign-exchange-spot.json",
+      "sha256": "20b3e179c69af3d3de78e9e34b02194013f5f3edfc5c4602bd9859e4423b5ba0",
+      "bytes": 2356,
+      "error": null
+    }
+  ]
+}
